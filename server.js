@@ -30,7 +30,16 @@ if (DATABASE_URL) {
 }
 
 app.use(express.json({ limit: "20kb" }));
-app.use(express.static(path.join(__dirname, "public"), { maxAge: "7d", index: "index.html" }));
+app.use(
+  express.static(path.join(__dirname, "public"), {
+    index: "index.html",
+    setHeaders: (res, filePath) => {
+      // HTML, CSS and JS always re-check for updates; images can be cached for a day
+      if (/\.(html|css|js)$/.test(filePath)) res.setHeader("Cache-Control", "no-cache");
+      else res.setHeader("Cache-Control", "public, max-age=86400");
+    },
+  })
+);
 
 app.get("/health", (_req, res) => res.json({ ok: true }));
 
