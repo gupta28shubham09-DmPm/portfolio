@@ -17,7 +17,7 @@
   $("#year").textContent = new Date().getFullYear();
 
   // ---- Rotating headline words ----
-  const words = ["qualified leads.", "real sales.", "higher ROAS.", "loyal customers.", "brand growth."];
+  const words = ["qualified leads", "real sales", "higher ROAS", "loyal customers", "brand growth"];
   const rot = $("#rotator");
   let wi = 0;
   if (!reduce) {
@@ -90,11 +90,12 @@
 
   // ---- Looping result toasts ----
   const toasts = [
-    ["Real Estate", "11 site visits booked", "From 375 leads in just 3 weeks"],
+    ["Real Estate", "11 site visits booked", "1 in 4 qualified buyers visited in 3 weeks"],
+    ["Real Estate", "13.1% click-to-lead rate", "2,856 clicks turned into 375 leads"],
     ["EdTech", "Lead at ₹1.75", "373 hiring leads at an average of ₹3.92"],
     ["Real Estate", "Cost per lead ₹97.71", "Custom & lookalike audiences"],
     ["EdTech", "CPM just ₹2.49", "6.77L people reached on result posts"],
-    ["Real Estate", "46 qualified buyers", "1.41% CTR across Meta & Google"],
+    ["Real Estate", "46 qualified buyers", "From 2L+ impressions at 1.41% CTR"],
     ["EdTech", "₹0.11 per video view", "16.6K full video plays"],
     ["All industries", "₹15.5L+ budget managed", "900+ leads generated so far"],
   ];
