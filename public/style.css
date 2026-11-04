@@ -216,7 +216,28 @@ strong { color: #fff; font-weight: 700; }
 .service:hover .svc-ico svg { stroke: #111; }
 .service h3 { font-family: var(--display); font-size: 23px; margin-bottom: 10px; }
 .service p { color: var(--muted); font-size: 16px; }
+.service p em { font-style: normal; color: var(--yellow); font-weight: 700; }
 .svc-tag { display: inline-block; margin-top: 18px; font-size: 13px; font-weight: 700; color: #8ea6ff; }
+
+
+/* AI & LLM Ads feature card */
+.service-wide { grid-column: 1 / -1; padding: 36px 34px; border-color: rgba(255, 200, 61, 0.35); background: linear-gradient(120deg, rgba(255, 200, 61, 0.08), rgba(47, 91, 255, 0.12) 60%, rgba(255,255,255,.02)); }
+.service-wide::after { content: ""; position: absolute; inset: -1px; border-radius: inherit; padding: 1px; background: linear-gradient(120deg, var(--yellow), transparent 40%, #6f8dff 80%); -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0); -webkit-mask-composite: xor; mask-composite: exclude; opacity: .6; pointer-events: none; animation: glowSpin 6s linear infinite; background-size: 200% 200%; }
+@keyframes glowSpin { 50% { background-position: 100% 100%; } }
+.svc-wide-grid { display: grid; grid-template-columns: 1fr 1.1fr; gap: 34px; align-items: center; position: relative; }
+.service-wide h3 { font-size: 28px; }
+.service-wide p { font-size: 16.5px; }
+.svc-ico-ai { background: linear-gradient(140deg, var(--yellow), #e59c00); box-shadow: 0 10px 30px -10px rgba(255, 200, 61, 0.7); }
+.svc-ico-ai svg { stroke: #111; }
+.new-badge { position: absolute; top: 18px; right: 20px; z-index: 2; font-size: 12px; font-weight: 800; letter-spacing: 1px; text-transform: uppercase; color: #111; background: var(--yellow); padding: 5px 11px; border-radius: 100px; animation: badgePulse 2.4s infinite; }
+@keyframes badgePulse { 0%,100% { box-shadow: 0 0 0 0 rgba(255,200,61,.5); } 60% { box-shadow: 0 0 0 10px rgba(255,200,61,0); } }
+.ai-list { list-style: none; display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+.ai-list li { padding: 14px 16px; border-radius: 14px; background: rgba(6, 8, 15, 0.55); border: 1px solid var(--line); transition: border-color .3s, transform .4s var(--ease); }
+.ai-list li:hover { border-color: rgba(255, 200, 61, .5); transform: translateY(-3px); }
+.ai-list b { display: block; font-size: 15px; color: #fff; margin-bottom: 3px; }
+.ai-list span { display: block; font-size: 13.5px; color: var(--muted); line-height: 1.45; }
+@media (max-width: 1000px) { .svc-wide-grid { grid-template-columns: 1fr; gap: 22px; } }
+@media (max-width: 760px) { .service-wide { padding: 30px 22px; } .ai-list { grid-template-columns: 1fr; } .new-badge { top: 14px; right: 14px; } }
 
 /* Process */
 .process { list-style: none; display: grid; grid-template-columns: repeat(5, 1fr); gap: 16px; counter-reset: s; position: relative; }
