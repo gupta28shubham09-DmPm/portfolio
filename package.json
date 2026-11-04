@@ -1,0 +1,17 @@
+{
+  "name": "shubham-gupta-portfolio",
+  "version": "1.0.0",
+  "description": "Portfolio website of Shubham Gupta - Performance & Digital Marketing",
+  "main": "server.js",
+  "type": "commonjs",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "dependencies": {
+    "express": "^4.21.2",
+    "pg": "^8.13.1"
+  }
+}
