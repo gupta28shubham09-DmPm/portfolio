@@ -120,7 +120,7 @@
   const onScroll = () => {
     const y = scrollY, h = document.documentElement.scrollHeight - innerHeight;
     bar.style.width = `${(y / h) * 100}%`;
-    nav.classList.toggle("hide", y > lastY && y > 400 && !$("#navLinks").classList.contains("open"));
+    nav.classList.toggle("scrolled", y > 30);
     lastY = y;
     const r = tl.getBoundingClientRect();
     const p = Math.min(Math.max((innerHeight * 0.6 - r.top) / r.height, 0), 1);

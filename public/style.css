@@ -65,7 +65,7 @@ strong { color: #fff; font-weight: 700; }
   backdrop-filter: blur(16px); -webkit-backdrop-filter: blur(16px);
   transition: transform 0.5s var(--ease), background 0.3s;
 }
-.nav.hide { transform: translate(-50%, -140%); }
+.nav.scrolled { background: rgba(8, 11, 22, 0.88); border-color: rgba(255, 255, 255, 0.12); box-shadow: 0 14px 40px -18px rgba(0, 0, 0, 0.9); }
 .logo { font-family: var(--display); font-weight: 800; font-size: 22px; letter-spacing: -0.5px; white-space: nowrap; }
 .logo span { color: var(--yellow); }
 .logo i { font-style: normal; color: #6f8dff; }
@@ -136,6 +136,14 @@ strong { color: #fff; font-weight: 700; }
 .hero-sub { font-size: 19px; color: var(--muted); max-width: 560px; }
 .hero-sub em { font-style: normal; }
 .hero-cta { display: flex; flex-wrap: wrap; gap: 14px; margin: 34px 0 38px; }
+.hero-social { display: flex; gap: 14px; margin: -12px 0 32px; }
+.hero-social a { width: 54px; height: 54px; border-radius: 50%; display: grid; place-items: center; background: rgba(255, 255, 255, 0.06); border: 1px solid rgba(255, 255, 255, 0.14); color: #fff; transition: transform .35s var(--ease), background .3s, border-color .3s, box-shadow .3s; }
+.hero-social a:hover { transform: translateY(-4px); background: var(--yellow); border-color: var(--yellow); color: #111; box-shadow: 0 12px 28px -10px rgba(255, 200, 61, .7); }
+.hero-social svg { width: 22px; height: 22px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+.hero-social img { width: 22px; height: 22px; filter: invert(1); transition: filter .3s; }
+.hero-social a:hover img { filter: none; }
+.soc-in { font-family: var(--body); font-weight: 800; font-size: 19px; letter-spacing: -0.5px; }
+@media (max-width: 760px) { .hero-social a { width: 48px; height: 48px; } }
 .hero-trust { display: flex; align-items: center; flex-wrap: wrap; gap: 16px; color: var(--muted); font-size: 14px; }
 .hero-trust b { color: #cdd3e2; font-weight: 600; }
 .hero-trust i { width: 4px; height: 4px; border-radius: 50%; background: var(--yellow); }
