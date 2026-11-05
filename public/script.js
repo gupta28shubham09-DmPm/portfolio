@@ -177,6 +177,22 @@
     })
   );
 
+  // ---- "Book a Call" buttons: scroll to the form, pop it up and show a hint ----
+  const leadForm = $("#leadForm"), hint = $("#formHint");
+  $$(".js-book").forEach((btn) =>
+    btn.addEventListener("click", (e) => {
+      e.preventDefault();
+      leadForm.classList.add("in");
+      leadForm.scrollIntoView({ behavior: reduce ? "auto" : "smooth", block: "center" });
+      setTimeout(() => {
+        leadForm.classList.remove("pop"); void leadForm.offsetWidth; leadForm.classList.add("pop");
+        hint.classList.add("show");
+        leadForm.name.focus({ preventScroll: true });
+      }, reduce ? 0 : 700);
+      setTimeout(() => leadForm.classList.remove("pop"), 3200);
+    })
+  );
+
   // ---- Contact form -> /api/contact (Neon). Falls back to WhatsApp if the server is unreachable ----
   const form = $("#leadForm"), note = $("#formNote"), label = $(".btn-label", form);
   const waLink = (d) =>
@@ -199,7 +215,8 @@
       if (!res.ok || !out.ok) throw new Error(out.error || "Could not send");
       form.reset();
       note.className = "form-note ok";
-      note.textContent = "Thank you! I'll get back to you within 24 hours.";
+      note.textContent = "Thank you! You're registered. I'll call you back within 24 hours.";
+      hint.classList.remove("show");
     } catch (err) {
       note.className = "form-note err";
       note.innerHTML = `Couldn't send right now. <a href="${waLink(d)}" target="_blank" rel="noopener">Send it on WhatsApp instead →</a>`;

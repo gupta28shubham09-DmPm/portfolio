@@ -319,6 +319,17 @@ strong { color: #fff; font-weight: 700; }
 .form select option { background: #0a0f1f; }
 .form input:focus, .form select:focus, .form textarea:focus { outline: none; border-color: var(--yellow); box-shadow: 0 0 0 4px rgba(255, 200, 61, 0.12); }
 .form .invalid { border-color: #ff6b6b; }
+.form { position: relative; scroll-margin-top: 90px; }
+.form-hint { display: flex; align-items: center; gap: 12px; padding: 0 16px; max-height: 0; opacity: 0; overflow: hidden; border-radius: 14px; background: linear-gradient(120deg, rgba(255,200,61,.18), rgba(47,91,255,.18)); border: 1px solid rgba(255,200,61,.45); transition: max-height .5s var(--ease), opacity .4s, padding .5s var(--ease), margin .5s var(--ease); margin-bottom: -16px; }
+.form-hint.show { max-height: 120px; opacity: 1; padding: 14px 16px; margin-bottom: 0; }
+.fh-ico { font-size: 26px; animation: fhWave 1s ease-in-out 3; }
+.form-hint b { display: block; color: var(--yellow); font-size: 16px; }
+.form-hint small { display: block; color: #dfe4f0; font-size: 13.5px; line-height: 1.4; }
+@keyframes fhWave { 50% { transform: rotate(-14deg) scale(1.15); } }
+.form.pop { animation: formPop 1s cubic-bezier(.34,1.56,.64,1), formGlow 2.4s ease-out; }
+@keyframes formPop { 0% { transform: scale(.94) translateY(24px); } 55% { transform: scale(1.025) translateY(-4px); } 100% { transform: none; } }
+@keyframes formGlow { 0% { box-shadow: 0 0 0 0 rgba(255,200,61,.75); border-color: var(--yellow); } 60% { box-shadow: 0 0 0 18px rgba(255,200,61,0); border-color: var(--yellow); } 100% { box-shadow: 0 0 0 0 rgba(255,200,61,0); } }
+.form.pop input[name="name"] { border-color: var(--yellow); box-shadow: 0 0 0 4px rgba(255, 200, 61, 0.15); }
 .hp { position: absolute; left: -9999px; opacity: 0; }
 .form-note { min-height: 22px; font-weight: 600; font-size: 15px; }
 .form-note.ok { color: #35e08b; }
