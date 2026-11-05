@@ -441,6 +441,20 @@ strong { color: #fff; font-weight: 700; }
 .panel.run .bar i::after { width: var(--w); }
 .kpis-3 { grid-template-columns: repeat(3, 1fr) !important; }
 
+/* Tools logo strip */
+.logo-band { overflow: hidden; border-block: 1px solid var(--line); padding: 22px 0; background: var(--bg-2); transform: rotate(1.5deg) scale(1.03); margin: 10px 0 30px; }
+.logo-track { display: flex; width: max-content; animation: marquee 38s linear infinite; }
+.logo-track .dup { display: contents; }
+.logo-band:hover .logo-track { animation-play-state: paused; }
+.lg { display: inline-flex; align-items: center; gap: 14px; margin-right: 56px; white-space: nowrap; font-family: var(--display); font-weight: 700; font-size: clamp(20px, 2.4vw, 30px); color: #fff; }
+.lg-ico { flex: none; width: 42px; height: 42px; border-radius: 12px; display: grid; place-items: center; background: rgba(255,255,255,.06); border: 1px solid var(--line); font-style: normal; }
+.lg-ico img { width: 24px; height: 24px; filter: invert(1); }
+.lg-ico b { display: none; font-family: var(--body); font-size: 13px; font-weight: 800; color: #fff; }
+.lg-ico.no-img { background: var(--c, var(--blue)); border-color: transparent; }
+.lg-ico.no-img b { display: block; }
+.lg:nth-child(odd) .lg-ico:not(.no-img) { background: rgba(255, 200, 61, 0.1); border-color: rgba(255, 200, 61, 0.3); }
+@media (max-width: 760px) { .lg { margin-right: 36px; gap: 10px; } .lg-ico { width: 36px; height: 36px; } .lg-ico img { width: 20px; height: 20px; } }
+
 /* Ticker */
 .ticker { overflow: hidden; background: var(--yellow); color: #111; padding: 16px 0; transform: rotate(1.2deg) scale(1.03); margin: 20px 0; }
 .ticker-track { display: flex; gap: 46px; width: max-content; animation: marquee 34s linear infinite reverse; }
