@@ -299,6 +299,11 @@ strong { color: #fff; font-weight: 700; }
 .tools { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 34px; }
 .tools span { padding: 10px 16px; border-radius: 12px; background: var(--surface); border: 1px solid var(--line); font-weight: 600; font-size: 15px; transition: 0.3s var(--ease); }
 .tools span:hover { border-color: var(--yellow); color: var(--yellow); transform: translateY(-3px); }
+.skills-h { font-family: var(--display); font-weight: 800; font-size: clamp(26px, 3vw, 38px); letter-spacing: -0.8px; margin-top: 44px; }
+.skill-pills { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 22px; }
+.skill-pills span { display: inline-flex; align-items: center; gap: 8px; padding: 10px 16px; border-radius: 100px; font-weight: 700; font-size: 15px; color: #fff; background: linear-gradient(120deg, rgba(255, 200, 61, 0.12), rgba(47, 91, 255, 0.14)); border: 1px solid rgba(255, 200, 61, 0.38); transition: transform .35s var(--ease), background .3s, color .3s; }
+.skill-pills span:hover { transform: translateY(-3px); background: var(--yellow); color: #111; }
+.skill-pills i { font-style: normal; font-size: 16px; }
 .cred-block { padding: 28px; border-radius: var(--radius); border: 1px solid var(--line); background: var(--surface); margin-bottom: 20px; }
 .cred-block h4 { font-family: var(--display); font-size: 20px; margin-bottom: 14px; color: var(--yellow); }
 .cred-block ul { list-style: none; }
