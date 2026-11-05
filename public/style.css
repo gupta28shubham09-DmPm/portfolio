@@ -345,6 +345,26 @@ strong { color: #fff; font-weight: 700; }
 .form-note a { color: var(--yellow); text-decoration: underline; }
 
 /* Footer */
+/* Save contact */
+.hero-social a.soc-save { background: rgba(255, 200, 61, 0.12); border-color: rgba(255, 200, 61, 0.45); color: var(--yellow); }
+.hero-social a.soc-save:hover { background: var(--yellow); color: #111; }
+.save-band { padding: 10px 0 20px; }
+.save-card { display: flex; align-items: center; gap: 24px; padding: 26px 30px; border-radius: 22px; border: 1px solid rgba(255, 200, 61, 0.35); background: linear-gradient(120deg, rgba(255, 200, 61, 0.1), rgba(47, 91, 255, 0.12)); }
+.save-ico { flex: none; width: 60px; height: 60px; border-radius: 18px; display: grid; place-items: center; background: var(--yellow); color: #111; animation: badgePulse 2.4s infinite; }
+.save-ico svg, .footer-save svg { fill: none; stroke: currentColor; stroke-width: 1.9; stroke-linecap: round; stroke-linejoin: round; }
+.save-ico svg { width: 28px; height: 28px; }
+.save-copy { flex: 1; }
+.save-copy h3 { font-family: var(--display); font-size: 24px; margin-bottom: 4px; }
+.save-copy p { color: var(--muted); font-size: 15.5px; }
+.footer-save { display: inline-flex; align-items: center; gap: 8px; padding: 9px 16px; border-radius: 100px; border: 1px solid rgba(255, 200, 61, 0.4); color: var(--yellow); font-weight: 700; transition: background .3s, color .3s; }
+.footer-save:hover { background: var(--yellow); color: #111; }
+.footer-save svg { width: 17px; height: 17px; }
+@media (max-width: 760px) {
+  .save-card { flex-direction: column; text-align: center; padding: 24px 18px; gap: 14px; }
+  .save-card .btn { width: 100%; }
+  .hero-social { gap: 10px; }
+  .hero-social a { width: 46px; height: 46px; }
+}
 .footer { border-top: 1px solid var(--line); padding: 30px 0; }
 .footer-inner { display: flex; align-items: center; justify-content: space-between; gap: 20px; flex-wrap: wrap; color: var(--muted); font-size: 14px; }
 .to-top:hover { color: var(--yellow); }
