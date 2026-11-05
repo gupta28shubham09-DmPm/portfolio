@@ -193,6 +193,33 @@
     })
   );
 
+  // ---- "Save my number": opens the phone's Add Contact screen pre-filled ----
+  // Android (Chrome / Samsung Internet): native "New contact" screen via an intent, no file download.
+  // iPhone: the .vcf link opens iOS's contact card directly ("Create New Contact").
+  // Computers and in-app browsers: falls back to the .vcf file.
+  const ua = navigator.userAgent;
+  const isAndroid = /Android/i.test(ua);
+  const inApp = /; wv\)|FBAN|FBAV|Instagram|Line\//i.test(ua);
+  const isFirefox = /Firefox/i.test(ua);
+  const vcfUrl = new URL("shubham-gupta.vcf", location.href).href;
+  const enc = encodeURIComponent;
+  const contactIntent =
+    "intent:#Intent;action=android.intent.action.INSERT;type=vnd.android.cursor.dir/raw_contact;" +
+    "S.name=" + enc("Shubham Gupta") + ";" +
+    "S.phone=" + enc("+917692058084") + ";i.phone_type=2;" +
+    "S.email=" + enc("gupta28shubham09@gmail.com") + ";" +
+    "S.company=" + enc("Digital Shubham") + ";" +
+    "S.job_title=" + enc("Performance & Digital Marketer") + ";" +
+    "S.browser_fallback_url=" + enc(vcfUrl) + ";end";
+  $$(".js-save-contact").forEach((a) =>
+    a.addEventListener("click", (e) => {
+      if (isAndroid && !inApp && !isFirefox) {
+        e.preventDefault();
+        location.href = contactIntent;
+      }
+    })
+  );
+
   // ---- Contact form -> /api/contact (Neon). Falls back to WhatsApp if the server is unreachable ----
   const form = $("#leadForm"), note = $("#formNote"), label = $(".btn-label", form);
   const waLink = (d) =>
