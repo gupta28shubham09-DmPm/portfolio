@@ -632,3 +632,9 @@ body[data-anim="off"] .hero-title .line > span { transform: none; }
 body[data-anim="off"] .bar i::after, body[data-anim="off"] .split-bar i { width: var(--w) !important; }
 body[data-anim="off"] .f-row { width: max(var(--w), 230px); }
 body[data-anim="off"] .f-rate { opacity: 1; }
+
+/* experience extras */
+.tl-badge { display: inline-block; margin-left: 10px; padding: 2px 9px; border-radius: 999px; font-size: 11px; font-weight: 800; letter-spacing: .04em; text-transform: uppercase; color: var(--on-accent); background: var(--yellow); vertical-align: 1px; }
+.tl-date:empty { display: none; }
+.exp-total { margin-top: 12px; color: var(--muted); font-size: 15px; }
+.exp-total b { color: var(--yellow); }

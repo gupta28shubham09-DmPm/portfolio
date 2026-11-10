@@ -213,3 +213,12 @@ a { color: var(--blue-2); }
 .num-table td.how { color: var(--muted, #9aa3b8); }
 .chip-tag { font: 600 12.5px ui-monospace, Menlo, monospace; background: rgba(47,91,255,.15); color: #A9BBFF; border: 1px solid rgba(47,91,255,.4); border-radius: 8px; padding: 3px 8px; cursor: pointer; white-space: nowrap; }
 .chip-tag:hover { background: rgba(47,91,255,.3); }
+
+/* Experience preview */
+.exp-pv-total { margin: 6px 0 12px; color: var(--muted, #9aa3b8); font-size: 13.5px; }
+.exp-pv-total b { color: #FFC93C; font-size: 16px; }
+.exp-pv { margin: 0; padding-left: 20px; display: grid; gap: 8px; font-size: 14px; }
+.exp-pv-date { color: #FFC93C; font-weight: 700; margin-right: 6px; }
+.exp-pv-co { color: var(--muted, #9aa3b8); }
+.exp-pv-note { color: #ff9b9b; font-size: 12.5px; }
+.exp-pv .chip-tag { margin-right: 4px; font-size: 11px; padding: 1px 6px; }

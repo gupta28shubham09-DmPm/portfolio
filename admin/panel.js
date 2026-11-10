@@ -268,7 +268,40 @@
       main.append(card);
     }
     if (tab.id === "design") main.append(photoCard());
+    if (tab.keys.includes("experience")) {
+      const expCard = [...main.querySelectorAll("section.card")].find((cd) => cd.querySelector("h2") && cd.querySelector("h2").textContent === (S.schema.fields.experience.label || "experience"));
+      const pv = experiencePreview();
+      if (expCard) expCard.after(pv); else main.append(pv);
+    }
     swatch();
+  }
+
+  // ---------- Experience: live preview of how your jobs and years will look ----------
+  function experiencePreview() {
+    const body = h("div");
+    const card = h("section.card", {}, h("h2", { text: "Preview: your experience on the website (live)" }),
+      h("p.help", { text: "Updates as you change the settings or dates above. Save to put it on your website." }), body);
+    const draw = () => {
+      if (!window.DSNumbers) return;
+      const ctx = DSNumbers.compute(S.content);
+      const info = DSNumbers.experience(S.content);
+      const noMonths = (S.content.experience.items || []).some((e) => e.date && !e.skip && !/[a-z]{3}|\d{1,2}\s*[\/.]\s*\d{4}/i.test(e.date.replace(/present|now|current|till date|ongoing|to|till/gi, "")));
+      const style = S.content.experience.display.dateStyle;
+      fill(body,
+        h("div.exp-pv-total", {}, "Total: ", h("b", { text: info.text }), ` · {years} = ${ctx.display.years} · {months} = ${info.months} · {experience} = “${info.text}”`),
+        h("ol.exp-pv", {}, info.jobs.map((j) => h("li", {},
+          h("span.exp-pv-date", { text: j.dateText || "(no date shown)" }), j.ongoing && S.content.experience.display.currentBadge ? h("span.chip-tag", { text: "Current" }) : null,
+          h("b", { text: ` ${j.role || "(no role)"}` }), h("span.exp-pv-co", { text: j.company ? ` · ${j.company}` : "" }),
+          j.skip ? h("span.exp-pv-note", { text: " — not counted in years" }) : null))),
+        (S.content.experience.items || []).some((e) => e.hide) ? h("p.hint", { text: "Hidden jobs aren't listed above, but they still count in your years unless their “Don't count” switch is on." }) : null,
+        noMonths && /duration|since/i.test(style) ? h("div.warn-box", { text: "Some dates have only years (e.g. 2022 – 2024), so their duration counts the full years (Jan–Dec). Add months, like “Mar 2022 – Aug 2024”, for exact durations." }) : null);
+    };
+    let t; const later = () => { clearTimeout(t); t = setTimeout(() => { if (body.isConnected) draw(); }, 200); };
+    const m = $("main");
+    if (m._expL) { m.removeEventListener("input", m._expL); m.removeEventListener("change", m._expL); m.removeEventListener("click", m._expL); }
+    m._expL = later; ["input", "change", "click"].forEach((ev) => m.addEventListener(ev, later));
+    draw();
+    return card;
   }
 
   // ---------- Key numbers: live table of every calculated value ----------
@@ -296,7 +329,7 @@
         h("div.num-table-wrap", {}, h("table.num-table", {}, h("thead", {}, h("tr", {}, h("th", { text: "Tag" }), h("th", { text: "Value" }), h("th", { text: "Where it comes from" }))), h("tbody", {}, rows))),
         ctx.errors.length ? h("div.warn-box", {}, h("b", { text: "Please check: " }), ctx.errors.join(" ")) : null,
         tagWarnings(),
-        h("p.hint", { text: "Auto numbers: years = this year minus the earliest year in Experience · companies = different companies in Experience · budget = all industry budgets (Results) added up · leads = all industry leads added up. Funnel % and the budget bar are also calculated automatically." }));
+        h("p.hint", { text: "Auto numbers: years, months and experience come from your Experience dates — set how they're counted and shown in Experience & skills › How experience is shown · companies = different companies in Experience · budget = all industry budgets (Results) added up · leads = all industry leads added up. Funnel % and the budget bar are also calculated automatically." }));
     };
     let t; const later = () => { clearTimeout(t); t = setTimeout(() => { if (body.isConnected) draw(); }, 250); };
     const m = $("main");

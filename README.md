@@ -39,9 +39,18 @@ copy of your login is stored · "Log out everywhere" in the ⋯ menu signs out e
 ## Text formatting inside the panel
 `*word*` = yellow highlight · `~word~` = blue highlight · `**word**` = bold
 
+## Experience (Experience & skills › How experience is shown)
+- Job dates on the website: as typed, month & year, years only, duration only, dates + duration, years + duration, "Since …", or hidden
+- Duration style: 2 yrs 11 mos · 2 years 11 months · 2y 11m · 2.9 yrs · 3 yrs (rounded) · 2+ years
+- Years counted from only the time you worked (gaps skipped) or from your first job until today
+- {years} shown as whole years (rounded down or nearest), half years or one decimal
+- Per job: its own date style, "don't count in years" (courses, internships), "hide on website"
+- Optional "Current" badge, total experience under the heading, job order (as listed / newest / oldest)
+- A live preview in the panel shows the result before you save
+
 ## Numbers (🔢 Key numbers tab)
 Every number is typed once and used anywhere with a tag like `{cpl}`. Change it once, the whole site updates.
-- Calculated automatically: `{years}` (from the earliest year in Experience), `{companies}` (from Experience),
+- Calculated automatically: `{years}`, `{months}`, `{experience}` (e.g. “4 yrs 11 mos”), all from your Experience dates, `{companies}` (from Experience),
   `{budget}` (all industry budgets added up), `{leads}` (all industry leads added up)
 - Your own numbers: a plain number (`2856`) or a formula (`={clicks}/{impressions}*100`)
 - Also calculated: the budget bar, legend and total in Results, and every % between funnel steps
