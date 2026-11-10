@@ -80,7 +80,9 @@
   const plain = (v) => String(v ?? "").replace(/\*\*|\*|~/g, "");
 
   const CHECKS = {
-    num: (v) => v === "" || /^-?\d+(\.\d+)?$/.test(v) || "Numbers only (e.g. 97.71). Put ₹, %, + in the boxes before/after.",
+    num: (v) => v === "" || /^-?\d+(\.\d+)?$/.test(v) || /^\{[a-zA-Z][a-zA-Z0-9_]{0,30}\}$/.test(v) || "A number (e.g. 97.71) or one tag like {cpl}. Put ₹, %, + in the boxes before/after.",
+    key: (v) => v === "" || /^[a-zA-Z][a-zA-Z0-9_]{0,30}$/.test(v) || "Letters and numbers only, starting with a letter (e.g. cpl, reLeads)",
+    numformula: (v) => v === "" || /^(=[0-9a-zA-Z_{}()+\-*\/., ]+|-?[0-9][0-9,]*(\.[0-9]+)?)$/.test(v) || "A number (e.g. 2856) or a formula starting with = (e.g. ={clicks}/{impressions}*100)",
     url: (v) => v === "" || /^https:\/\/\S+$/.test(v) || "Must start with https://",
     slug: (v) => /^[a-z0-9]*$/.test(v) || "Small letters and numbers only (e.g. googleads)",
     phone: (v) => v === "" || /^\+?[0-9 ]{6,20}$/.test(v) || "Use digits with country code, e.g. +917692058084",
@@ -251,8 +253,10 @@
     fill(main, 
       h("h1.page-title", { text: `${tab.icon} ${tab.label}` }),
       h("p.page-sub", { text: "Edit anything below, then click “Save changes”. Your website updates instantly." }),
-      tab.id === "switches" ? null : h("div.tip", {}, "Text tips: ", h("code", { text: "*word*" }), " = yellow highlight · ", h("code", { text: "~word~" }), " = blue highlight · ", h("code", { text: "**word**" }), " = bold. Use ↑ ↓ to reorder boxes, ⧉ to copy one, ✕ to delete."),
+      tab.id === "switches" || tab.id === "numbers" ? null : h("div.tip", {}, "Text tips: ", h("code", { text: "*word*" }), " = yellow highlight · ", h("code", { text: "~word~" }), " = blue highlight · ", h("code", { text: "**word**" }), " = bold · ", h("code", { text: "{years}" }), " = a calculated number (see 🔢 Key numbers). Use ↑ ↓ to reorder boxes, ⧉ to copy one, ✕ to delete."),
     );
+    if (tab.id === "numbers") main.append(numbersCard());
+    else { const warn = tagWarnings(); if (warn) main.append(warn); }
     for (const key of tab.keys) {
       const node = S.schema.fields[key];
       const card = h("section.card", {}, h("h2", { text: node.label || key }), node.help ? h("p.help", { text: node.help }) : null);
@@ -265,6 +269,41 @@
     }
     if (tab.id === "design") main.append(photoCard());
     swatch();
+  }
+
+  // ---------- Key numbers: live table of every calculated value ----------
+  function calc() { return window.DSNumbers ? DSNumbers.compute(S.content) : null; }
+  function tagWarnings() {
+    const ctx = calc(); if (!ctx) return null;
+    const bad = DSNumbers.unknownTags(S.content, ctx);
+    return bad.length ? h("div.warn-box", { text: `These tags don't exist yet, so they show as typed on the website: ${bad.map((b) => `{${b}}`).join(" ")}. Add them in 🔢 Key numbers or fix the spelling.` }) : null;
+  }
+  function numbersCard() {
+    const body = h("div");
+    const card = h("section.card", {}, h("h2", { text: "Calculated values (live)" }),
+      h("p.help", { text: "Type a tag like {years} in any text or number box, anywhere in the panel, and the website shows the value below. Change a number here once and it updates everywhere. Click a tag to copy it." }), body);
+    const draw = () => {
+      const ctx = calc();
+      if (!ctx) { fill(body, h("p.hint", { text: "Couldn't load the calculator. Refresh the page." })); return; }
+      const defs = {}; (S.content.numbers || []).forEach((n) => { if (n && n.key && !defs[n.key]) defs[n.key] = n; });
+      const rows = [...ctx.known].map((k) => {
+        const auto = ctx.builtins[k];
+        const how = auto || [defs[k].label, String(defs[k].value || "").startsWith("=") ? `formula ${defs[k].value}` : ""].filter(Boolean).join(" · ");
+        const tag = h("button.chip-tag", { type: "button", text: `{${k}}`, title: "Copy", onclick: () => { navigator.clipboard && navigator.clipboard.writeText(`{${k}}`); flash(`Copied {${k}}`); } });
+        return h("tr", {}, h("td", {}, tag), h("td.val", { text: ctx.display[k] }), h("td.how", { text: (auto ? "Auto · " : "") + how }));
+      });
+      fill(body,
+        h("div.num-table-wrap", {}, h("table.num-table", {}, h("thead", {}, h("tr", {}, h("th", { text: "Tag" }), h("th", { text: "Value" }), h("th", { text: "Where it comes from" }))), h("tbody", {}, rows))),
+        ctx.errors.length ? h("div.warn-box", {}, h("b", { text: "Please check: " }), ctx.errors.join(" ")) : null,
+        tagWarnings(),
+        h("p.hint", { text: "Auto numbers: years = this year minus the earliest year in Experience · companies = different companies in Experience · budget = all industry budgets (Results) added up · leads = all industry leads added up. Funnel % and the budget bar are also calculated automatically." }));
+    };
+    let t; const later = () => { clearTimeout(t); t = setTimeout(() => { if (body.isConnected) draw(); }, 250); };
+    const m = $("main");
+    if (m._numL) { m.removeEventListener("input", m._numL); m.removeEventListener("click", m._numL); }
+    m._numL = later; m.addEventListener("input", later); m.addEventListener("click", later);
+    draw();
+    return card;
   }
 
   function photoCard() {

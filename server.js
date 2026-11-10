@@ -3,6 +3,7 @@
 const http = require("http");
 const fs = require("fs");
 const path = require("path");
+const numbers = require("./lib/numbers");
 const db = require("./lib/db");
 const auth = require("./lib/auth");
 const { normalize, problems, defaults } = require("./lib/content");
@@ -167,6 +168,10 @@ async function handleAdminApi(req, res, url) {
     const data = normalize(b.content, current);
     await db.saveContent(data, current);
     clearCache();
+    const ctx = numbers.compute(data);
+    const unknown = numbers.unknownTags(data, ctx);
+    if (unknown.length) issues.push(`These tags don't exist, so they show as typed: ${unknown.map((t) => `{${t}}`).join(" ")}`);
+    issues.push(...ctx.errors);
     return json(res, 200, { ok: true, content: data, warnings: issues, updatedAt: (await content()).updatedAt });
   }
   if (p === "/api/admin/preview" && m === "POST") {
@@ -277,6 +282,7 @@ async function handle(req, res) {
     return serveFile(res, ADMIN, "/panel.html", ADMIN_HEADERS) || send(res, 404, "Not found");
   }
   if (p === "/admin/login") return serveFile(res, ADMIN, "/login.html", ADMIN_HEADERS) || send(res, 404, "Not found");
+  if (p === "/admin/numbers.js") return serveFile(res, path.join(__dirname, "lib"), "/numbers.js", ADMIN_HEADERS) || send(res, 404, "Not found");
   if (/^\/admin\/[a-z-]+\.(css|js)$/.test(p)) return serveFile(res, ADMIN, p.slice("/admin".length), ADMIN_HEADERS) || send(res, 404, "Not found");
 
   // Old static copies of the page are no longer used; always serve the live page instead

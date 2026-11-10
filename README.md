@@ -39,12 +39,20 @@ copy of your login is stored · "Log out everywhere" in the ⋯ menu signs out e
 ## Text formatting inside the panel
 `*word*` = yellow highlight · `~word~` = blue highlight · `**word**` = bold
 
+## Numbers (🔢 Key numbers tab)
+Every number is typed once and used anywhere with a tag like `{cpl}`. Change it once, the whole site updates.
+- Calculated automatically: `{years}` (from the earliest year in Experience), `{companies}` (from Experience),
+  `{budget}` (all industry budgets added up), `{leads}` (all industry leads added up)
+- Your own numbers: a plain number (`2856`) or a formula (`={clicks}/{impressions}*100`)
+- Also calculated: the budget bar, legend and total in Results, and every % between funnel steps
+
 ## Files
 - `server.js` – web server, form, admin API
 - `lib/defaults.js` – the original website content (used for "Reset to original")
 - `lib/schema.js` – what the panel lets you edit
 - `lib/theme.js` – colour themes and fonts
 - `lib/render.js` – builds the website page from your content
+- `lib/numbers.js` – the calculator for {tags}; `lib/upgrade.js` – updates older saved content
 - `lib/auth.js`, `lib/db.js`, `lib/mail.js`, `lib/content.js` – login, database, emails, validation
 - `admin/` – the admin panel pages
 - `public/` – design (style.css), animations (script.js), photo
