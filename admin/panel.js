@@ -33,7 +33,82 @@
     return data;
   };
 
-  const S = { content: null, schema: null, tabs: [], defaults: null, dirty: false, tab: "leads", open: new Set(), leads: [], statuses: [], filter: "all", q: "", savedInDb: true };
+  const S = { live: [], content: null, schema: null, tabs: [], defaults: null, dirty: false, tab: "leads", open: new Set(), leads: [], statuses: [], filter: "all", q: "", savedInDb: true };
+
+  // Parts of the page that recalculate as you type (previews, calculated values)
+  let liveTimer;
+  const refreshLive = () => { clearTimeout(liveTimer); liveTimer = setTimeout(() => S.live.forEach((f) => { try { f(); } catch (e) { console.warn(e); } }), 150); };
+
+  // ---------- Live preview (right side): your website with unsaved changes ----------
+  const Live = (() => {
+    const SECTION = { hero: "top", about: "#about", results: "#results", experience: "#experience", contact: "#contact", more: "#contact", numbers: "#stats", switches: "top", design: "top" };
+    let timer, busy = false, again = false, front = "liveA", device = "desktop", lastUrl = "";
+    const store = (k, v) => { try { v === undefined ? localStorage.getItem(k) : localStorage.setItem(k, v); } catch {} };
+    const read = (k) => { try { return localStorage.getItem(k); } catch { return null; } };
+    const isOpen = () => document.body.classList.contains("live-on");
+    const state = (txt, cls) => { const el = $("liveState"); if (!el) return; el.className = `live-state ${cls || ""}`; el.lastElementChild.textContent = txt; };
+    function fit() {
+      const stage = $("liveStage"), scr = $("liveScreen"); if (!stage || !scr) return;
+      const w = device === "mobile" ? 390 : 1280;
+      const avail = stage.clientWidth - (device === "mobile" ? 24 : 0);
+      const scale = Math.min(1, avail / w);
+      const h = stage.clientHeight / scale - (device === "mobile" ? 24 / scale : 0);
+      scr.style.width = w + "px"; scr.style.height = h + "px";
+      scr.style.transform = `scale(${scale})`;
+      scr.style.left = Math.max(0, (stage.clientWidth - w * scale) / 2) + "px";
+      scr.style.top = device === "mobile" ? "12px" : "0px";
+      scr.dataset.device = device;
+    }
+    function frameScroll(f) { try { return f.contentWindow.scrollY || 0; } catch { return 0; } }
+    async function update(force) {
+      if (!isOpen() || !S.content) return;
+      if (busy) { again = true; return; }
+      busy = true; state("Updating…", "busy");
+      try {
+        const r = await api("POST", "/api/admin/preview", { content: S.content, live: true });
+        const cur = $(front), next = $(front === "liveA" ? "liveB" : "liveA");
+        const y = lastUrl ? frameScroll(cur) : null;
+        await new Promise((ok) => { next.onload = ok; next.src = r.url; setTimeout(ok, 8000); });
+        try { if (y !== null) next.contentWindow.scrollTo({ top: y, behavior: "instant" }); else jump(S.tab, next, true); } catch {}
+        next.classList.add("front"); cur.classList.remove("front");
+        front = next.id; lastUrl = r.url;
+        state("Up to date", "ok");
+      } catch (e) { state("Couldn't update", "err"); }
+      busy = false;
+      if (again) { again = false; update(); }
+    }
+    function schedule() { if (!isOpen()) return; state("Changes waiting…", "busy"); clearTimeout(timer); timer = setTimeout(update, 700); }
+    function jump(tab, f, instant) {
+      f = f || $(front); const sel = SECTION[tab]; if (!sel || !f) return;
+      try {
+        const w = f.contentWindow, d = f.contentDocument;
+        if (sel === "top") return w.scrollTo({ top: 0, behavior: instant ? "instant" : "smooth" });
+        const el = d.querySelector(sel); if (!el) return;
+        w.scrollTo({ top: el.getBoundingClientRect().top + w.scrollY - 80, behavior: instant ? "instant" : "smooth" });
+      } catch {}
+    }
+    function setOpen(on) {
+      document.body.classList.toggle("live-on", on);
+      $("liveBtn").classList.toggle("on", on);
+      store("ds_live", on ? "1" : "0");
+      if (on) { fit(); if (!lastUrl) update(); else schedule(); }
+    }
+    function init() {
+      const saved = read("ds_live");
+      $("liveBtn").onclick = () => setOpen(!isOpen());
+      $("liveClose").onclick = () => setOpen(false);
+      $("liveReload").onclick = () => update(true);
+      document.querySelectorAll("#live .seg button").forEach((b) => b.onclick = () => {
+        device = b.dataset.device; store("ds_live_device", device);
+        document.querySelectorAll("#live .seg button").forEach((x) => x.classList.toggle("on", x === b));
+        fit(); lastUrl = ""; update();
+      });
+      const dv = read("ds_live_device"); if (dv === "mobile") document.querySelector('#live .seg [data-device="mobile"]').click();
+      addEventListener("resize", fit);
+      setOpen(saved === null ? innerWidth >= 1200 : saved === "1");
+    }
+    return { schedule, update, jump, init, isOpen };
+  })();
 
   // ---------- Flash message ----------
   let flashTimer;
@@ -51,6 +126,7 @@
   const clearDraft = () => { clearTimeout(draftTimer); try { localStorage.removeItem(DRAFT); } catch {} };
   function setDirty(v) {
     S.dirty = v;
+    if (v) Live.schedule();
     if (v) { clearTimeout(draftTimer); draftTimer = setTimeout(saveDraft, 500); }
     $("saveState").classList.toggle("dirty", v);
     $("saveState").lastElementChild.textContent = v ? "Unsaved changes" : "All changes saved";
@@ -101,6 +177,7 @@
     if (node.t === "group") return groupBlock(node, path, onChange, true);
     if (node.t === "list") return listBlock(node, path);
     if (node.t === "order") return orderBlock(node, path);
+    if (node.t === "month") return monthField(node, path, onChange);
     const isTheme = path[0] === "theme";
 
     const wrap = h("div.f");
@@ -127,6 +204,29 @@
     wrap.append(h("label.lbl", { text: node.label }), input, hint);
     if (node.t !== "select" && node.t !== "color") validate(String(value ?? ""));
     return wrap;
+  }
+
+  // Month & year picker (a calendar where the browser has one, otherwise two drop-downs)
+  const MONTH_NAMES = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+  const hasMonthInput = (() => { const i = document.createElement("input"); i.setAttribute("type", "month"); return i.type === "month"; })();
+  function monthField(node, path, onChange) {
+    const value = get(path) || "";
+    const now = new Date();
+    const maxV = `${now.getFullYear() + 1}-12`;
+    const save = (v) => { set(path, v); onChange && onChange(); };
+    let input;
+    if (hasMonthInput) {
+      input = h("input", { type: "month", value, min: "1990-01", max: maxV, onchange: (e) => save(e.target.value), oninput: (e) => save(e.target.value) });
+    } else {
+      const [y0, m0] = value ? value.split("-") : ["", ""];
+      const mSel = h("select", {}, h("option", { value: "", text: "Month" }), MONTH_NAMES.map((n, i) => h("option", { value: String(i + 1).padStart(2, "0"), text: n, selected: m0 === String(i + 1).padStart(2, "0") })));
+      const years = []; for (let y = now.getFullYear() + 1; y >= 1990; y--) years.push(y);
+      const ySel = h("select", {}, h("option", { value: "", text: "Year" }), years.map((y) => h("option", { value: String(y), text: String(y), selected: y0 === String(y) })));
+      const upd = () => save(mSel.value && ySel.value ? `${ySel.value}-${mSel.value}` : "");
+      mSel.onchange = upd; ySel.onchange = upd;
+      input = h("div.month-pick", {}, mSel, ySel);
+    }
+    return h("div.f", {}, h("label.lbl", { text: node.label }), input, node.help ? h("span.hint", { text: node.help }) : null);
   }
 
   // Picking a ready-made theme fills in its colours (you can still tweak them; that switches to "Custom")
@@ -231,8 +331,12 @@
         const title = h("span.title", { text: titleText() });
         title.classList.toggle("empty", !plain(titleKey ? val[titleKey] : ""));
         const body = h("div.item-body");
-        const item = h("div.item", {}, h("div.item-head", { onclick: () => toggle() }, h("span.num", { text: i + 1 }), title, tools(i), h("span.chev", { text: "›" })), body);
-        const fillBody = () => { fill(body, groupBlock(node.of, path.concat(i), () => { title.textContent = titleText(); title.classList.toggle("empty", !plain(val[titleKey])); }, false)); };
+        const meta = node.of.layout === "job" ? h("span.item-meta") : null;
+        if (meta) S.live.push(() => { if (meta.isConnected) meta.textContent = jobSummary(val); });
+        if (meta) meta.textContent = jobSummary(val);
+        const item = h("div.item", {}, h("div.item-head", { onclick: () => toggle() }, h("span.num", { text: i + 1 }), title, meta, tools(i), h("span.chev", { text: "›" })), body);
+        const onEdit = () => { title.textContent = titleText(); title.classList.toggle("empty", !plain(val[titleKey])); };
+        const fillBody = () => { fill(body, node.of.layout === "job" ? jobBlock(node.of, path.concat(i), onEdit) : groupBlock(node.of, path.concat(i), onEdit, false)); };
         const toggle = () => { const k = key(i); if (S.open.has(k)) { S.open.delete(k); item.classList.remove("open"); } else { S.open.add(k); fillBody(); item.classList.add("open"); } };
         if (S.open.has(key(i))) { fillBody(); item.classList.add("open"); }
         items.append(item);
@@ -258,6 +362,7 @@
     if (tab.id === "numbers") main.append(numbersCard());
     else { const warn = tagWarnings(); if (warn) main.append(warn); }
     for (const key of tab.keys) {
+      if (key === "experience") { experienceCards().forEach((cd) => main.append(cd)); continue; }
       const node = S.schema.fields[key];
       const card = h("section.card", {}, h("h2", { text: node.label || key }), node.help ? h("p.help", { text: node.help }) : null);
       if (key === "theme") card.append(h("div.swatch", { id: "themeSwatch" },
@@ -268,40 +373,153 @@
       main.append(card);
     }
     if (tab.id === "design") main.append(photoCard());
-    if (tab.keys.includes("experience")) {
-      const expCard = [...main.querySelectorAll("section.card")].find((cd) => cd.querySelector("h2") && cd.querySelector("h2").textContent === (S.schema.fields.experience.label || "experience"));
-      const pv = experiencePreview();
-      if (expCard) expCard.after(pv); else main.append(pv);
-    }
+
     swatch();
   }
 
-  // ---------- Experience: live preview of how your jobs and years will look ----------
-  function experiencePreview() {
-    const body = h("div");
-    const card = h("section.card", {}, h("h2", { text: "Preview: your experience on the website (live)" }),
-      h("p.help", { text: "Updates as you change the settings or dates above. Save to put it on your website." }), body);
+  // ---------- Experience page: jobs with calendar dates, settings as clickable examples, live preview ----------
+  const EXP = ["experience"];
+  const expSet = () => S.content.experience.display;
+  const DN = () => window.DSNumbers;
+  // a job's short summary for its closed box, e.g. "Mar 2023 – Jan 2026 · 2 yrs 11 mos"
+  function jobSummary(job) {
+    if (!DN()) return "";
+    const r = DN().readJob(job, DN().nowMonth(new Date()));
+    if (!r) return job.date ? job.date : "no dates yet";
+    const set = { ...expSet(), dateStyle: "datesDuration" };
+    const t = DN().experience({ experience: { display: set, items: [{ ...job, hide: false, dateStyle: "main" }] } }).jobs[0].dateText;
+    return [t, job.skip ? "not counted" : "", job.hide ? "hidden" : ""].filter(Boolean).join(" · ");
+  }
+  // the website result if one setting had a different value (for the examples on each option)
+  function tryOption(key, value) {
+    const c = JSON.parse(JSON.stringify(S.content));
+    c.experience.display[key] = value;
+    return { info: DN().experience(c), ctx: DN().compute(c) };
+  }
+  // a setting shown as clickable cards, each with a live example from your own jobs
+  function tiles(key, title, help, example, notes = {}) {
+    const node = S.schema.fields.experience.fields.display.fields[key];
+    const grid = h("div.tiles");
     const draw = () => {
-      if (!window.DSNumbers) return;
-      const ctx = DSNumbers.compute(S.content);
-      const info = DSNumbers.experience(S.content);
-      const noMonths = (S.content.experience.items || []).some((e) => e.date && !e.skip && !/[a-z]{3}|\d{1,2}\s*[\/.]\s*\d{4}/i.test(e.date.replace(/present|now|current|till date|ongoing|to|till/gi, "")));
-      const style = S.content.experience.display.dateStyle;
-      fill(body,
-        h("div.exp-pv-total", {}, "Total: ", h("b", { text: info.text }), ` · {years} = ${ctx.display.years} · {months} = ${info.months} · {experience} = “${info.text}”`),
-        h("ol.exp-pv", {}, info.jobs.map((j) => h("li", {},
-          h("span.exp-pv-date", { text: j.dateText || "(no date shown)" }), j.ongoing && S.content.experience.display.currentBadge ? h("span.chip-tag", { text: "Current" }) : null,
-          h("b", { text: ` ${j.role || "(no role)"}` }), h("span.exp-pv-co", { text: j.company ? ` · ${j.company}` : "" }),
-          j.skip ? h("span.exp-pv-note", { text: " — not counted in years" }) : null))),
-        (S.content.experience.items || []).some((e) => e.hide) ? h("p.hint", { text: "Hidden jobs aren't listed above, but they still count in your years unless their “Don't count” switch is on." }) : null,
-        noMonths && /duration|since/i.test(style) ? h("div.warn-box", { text: "Some dates have only years (e.g. 2022 – 2024), so their duration counts the full years (Jan–Dec). Add months, like “Mar 2022 – Aug 2024”, for exact durations." }) : null);
+      const cur = expSet()[key];
+      fill(grid, node.options.map(([v, name, desc]) => {
+        let ex = ""; try { ex = example(v); } catch {}
+        return h("button.tile", { type: "button", class: v === cur ? "on" : "", onclick: () => { set(EXP.concat("display", key), v); refreshLive(); } },
+          h("span.tile-name", { text: name }),
+          h("span.tile-ex", { text: ex || "—" }),
+          desc ? h("span.tile-desc", { text: desc }) : null,
+          notes[v] ? h("span.tile-note", { text: notes[v] }) : null);
+      }));
     };
-    let t; const later = () => { clearTimeout(t); t = setTimeout(() => { if (body.isConnected) draw(); }, 200); };
-    const m = $("main");
-    if (m._expL) { m.removeEventListener("input", m._expL); m.removeEventListener("change", m._expL); m.removeEventListener("click", m._expL); }
-    m._expL = later; ["input", "change", "click"].forEach((ev) => m.addEventListener(ev, later));
+    S.live.push(() => { if (grid.isConnected) draw(); });
     draw();
-    return card;
+    return h("div.setting", {}, h("div.setting-title", { text: title }), help ? h("p.hint", { text: help }) : null, grid);
+  }
+  function jobBlock(node, path, onEdit) {
+    const F = node.fields;
+    const wrap = h("div.job");
+    const job = () => get(path);
+    const status = h("div.job-status");
+    const showStatus = () => {
+      const j = job(); if (!DN()) return;
+      const r = DN().readJob(j, DN().nowMonth(new Date()));
+      let text = "", bad = false;
+      if (!j.start && !r) { text = "Pick the month you started (and ended) to count this job."; bad = true; }
+      else if (!j.start && r) { text = `No months picked yet, so “${j.date}” is counted as full years. Pick months above for an exact count.`; bad = true; }
+      else if (r.issue === "noEnd") { text = "Pick the month you left, or switch on “I currently work here”."; bad = true; }
+      else if (r.issue === "endBeforeStart") { text = "The end month is before the start month."; bad = true; }
+      else if (r.issue === "future") { text = "The start month is in the future, so this job adds nothing yet."; bad = true; }
+      else text = `✓ ${DN().duration(r.end - r.start, expSet().durationStyle) || "less than a month"}${j.skip ? " · not counted in your years" : ""}`;
+      status.textContent = text; status.classList.toggle("bad", bad);
+    };
+    const changed = () => { onEdit && onEdit(); showStatus(); };
+    const moreKey = path.join(".") + ".more";
+    const draw = () => {
+      const j = job();
+      const more = h("details.job-more", { open: S.open.has(moreKey), ontoggle: (e) => (e.target.open ? S.open.add(moreKey) : S.open.delete(moreKey)) },
+        h("summary", { text: "More options (custom text, date style, don't count, hide)" }),
+        h("div.fields", {}, field(F.date, path.concat("date"), changed), field(F.dateStyle, path.concat("dateStyle"), changed)),
+        h("div.toggles", {}, field(F.skip, path.concat("skip"), changed), field(F.hide, path.concat("hide"), changed)));
+      fill(wrap,
+        h("div.job-grid", {}, field(F.role, path.concat("role"), changed), field(F.company, path.concat("company"), changed)),
+        h("div.job-when", {},
+          h("div.setting-title", { text: "📅 When did you work here?" }),
+          h("div.job-dates", {},
+            field(F.start, path.concat("start"), changed),
+            h("span.job-to", { text: "to" }),
+            j.current ? h("div.f.job-now", {}, h("label.lbl", { text: "Ended" }), h("div.now-pill", { text: expSet().presentWord || "Present" })) : field(F.end, path.concat("end"), changed)),
+          h("div.toggles", {}, field(F.current, path.concat("current"), () => { changed(); draw(); })),
+          status),
+        field(F.text, path.concat("text"), changed),
+        more);
+      showStatus();
+    };
+    draw();
+    return wrap;
+  }
+  function experienceCards() {
+    const E = S.schema.fields.experience.fields;
+    const D = E.display.fields;
+    const sample = (info) => { const j = info.jobs.find((x) => x.dateText) || info.jobs[0]; return j ? j.dateText : ""; };
+    const gapNote = h("div");
+    const yearsNow = h("div.big-result");
+    S.live.push(() => {
+      if (!DN()) return;
+      const info = DN().experience(S.content), ctx = DN().compute(S.content);
+      const st = expSet().dateStyle;
+      const hides = st === "duration" || st === "hidden";
+      fill(gapNote, info.gaps.length ? h(hides ? "div.ok-box" : "div.warn-box", {},
+        h("b", { text: hides ? "✓ Gap hidden. " : "Heads-up: your dates show a gap. " }),
+        info.gaps.map((g) => `${g.from === g.to ? g.from : `${g.from} – ${g.to}`} (${DN().duration(g.months, "short")})`).join(", ") + ". ",
+        hides ? "Your website shows durations only, so nobody sees it." : "To keep it off the website, pick “Duration only” or “Hide dates” below.") : null);
+      fill(yearsNow, h("span", { text: "Your website will say" }), h("b", { text: `${ctx.display.years}+ years` }),
+        h("span", { text: `Total worked: ${info.text} · ${ctx.display.companies} companies` }));
+    });
+    const cards = [
+      h("section.card", {}, h("h2", { text: "🎓 Experience section" }),
+        h("div.fields", {}, field(E.show, EXP.concat("show")), field(E.navLabel, EXP.concat("navLabel")), field(E.title, EXP.concat("title"))),
+        h("p.hint", { text: "{years} and {companies} in the heading are filled in automatically from your jobs below." })),
+      h("section.card", {}, h("h2", { text: "① Your jobs" }),
+        h("p.help", { text: "Add each job with the month you started and the month you left. Your years of experience are calculated from these dates." }),
+        gapNote, listBlock(E.items, EXP.concat("items"))),
+      h("section.card", {}, h("h2", { text: "② How dates look on your website" }),
+        h("p.help", { text: "Click a card to choose it. Each card shows how your own latest job will look." }),
+        tiles("dateStyle", "Job dates", "", (v) => sample(tryOption("dateStyle", v).info),
+          { duration: "Hides gaps", hidden: "Hides gaps", asTyped: "Uses each job's custom text" }),
+        tiles("durationStyle", "Duration style", "Used in durations and in {experience}.", (v) => tryOption("durationStyle", v).info.text),
+        h("div.fields", {}, field(D.presentWord, EXP.concat("display", "presentWord"))),
+        h("div.toggles", {}, field(D.currentBadge, EXP.concat("display", "currentBadge"))),
+        tiles("sort", "Job order", "", (v) => { const j = tryOption("sort", v).info.jobs[0]; return j ? `First: ${j.role}` : ""; })),
+      h("section.card", {}, h("h2", { text: "③ Your years of experience" }),
+        yearsNow,
+        tiles("countMode", "How years are counted", "", (v) => `${tryOption("countMode", v).info.text}`, { worked: "Gaps not counted", span: "Gaps counted" }),
+        tiles("yearsRounding", "The {years} number", "Shown in your top stats, About text and Experience heading.", (v) => `${tryOption("yearsRounding", v).ctx.display.years}+ years`),
+        h("div.toggles", {}, field(D.totalBadge, EXP.concat("display", "totalBadge"))),
+        h("div.fields", {}, field(D.totalLabel, EXP.concat("display", "totalLabel")))),
+      experiencePreview(),
+    ];
+    S.live.forEach((f) => f());
+    return cards;
+  }
+  function experiencePreview() {
+    const body = h("div.site-pv");
+    const draw = () => {
+      if (!DN()) return;
+      const info = DN().experience(S.content);
+      const set = expSet();
+      const title = DN().fill(S.content.experience.title, DN().compute(S.content)).replace(/\*\*|\*|~/g, "");
+      fill(body,
+        h("div.pv-head", { text: title }),
+        set.totalBadge && info.months ? h("div.pv-total", {}, `${set.totalLabel}${set.totalLabel ? ": " : ""}`, h("b", { text: info.text })) : null,
+        info.jobs.length ? info.jobs.map((j) => h("div.pv-job", {},
+          j.dateText || (j.ongoing && set.currentBadge) ? h("div.pv-date", {}, j.dateText, j.ongoing && set.currentBadge ? h("span.pv-badge", { text: "Current" }) : null) : null,
+          h("div.pv-role", {}, j.role || "(no role)", j.company ? h("em", { text: ` · ${j.company}` }) : null),
+          j.skip ? h("div.pv-note", { text: "Shown, but not counted in your years" }) : null)) : h("p.hint", { text: "No jobs to show." }));
+    };
+    S.live.push(() => { if (body.isConnected) draw(); });
+    draw();
+    return h("section.card", {}, h("h2", { text: "👀 Preview — how it looks on your website" }),
+      h("p.help", { text: "Updates as you edit. Click “Save changes” to publish, or “Preview” (top) to see the full website." }), body);
   }
 
   // ---------- Key numbers: live table of every calculated value ----------
@@ -331,10 +549,7 @@
         tagWarnings(),
         h("p.hint", { text: "Auto numbers: years, months and experience come from your Experience dates — set how they're counted and shown in Experience & skills › How experience is shown · companies = different companies in Experience · budget = all industry budgets (Results) added up · leads = all industry leads added up. Funnel % and the budget bar are also calculated automatically." }));
     };
-    let t; const later = () => { clearTimeout(t); t = setTimeout(() => { if (body.isConnected) draw(); }, 250); };
-    const m = $("main");
-    if (m._numL) { m.removeEventListener("input", m._numL); m.removeEventListener("click", m._numL); }
-    m._numL = later; m.addEventListener("input", later); m.addEventListener("click", later);
+    S.live.push(() => { if (body.isConnected) draw(); });
     draw();
     return card;
   }
@@ -490,6 +705,7 @@
     mob.onchange = (e) => go(e.target.value);
   }
   function go(id) {
+    S.live = [];
     const page = pages().find((p) => p.id === id) || pages()[0];
     S.tab = page.id;
     history.replaceState(null, "", `#${page.id}`);
@@ -500,6 +716,7 @@
     else contentPage(page);
     updateCounts();
     window.scrollTo({ top: 0 });
+    Live.jump(page.id);
   }
 
   // ---------- Save ----------
@@ -512,6 +729,7 @@
       setDirty(false); clearDraft();
       if (r.warnings && r.warnings.length) flash("Saved, but some values weren't valid and were kept as before:", "err", r.warnings);
       else flash("✓ Saved! Your website is updated.");
+      Live.schedule();
       if (S.tab !== "leads" && S.tab !== "versions") go(S.tab);
     } catch (e) {
       flash(`Couldn't save: ${e.message}`, "err");
@@ -528,6 +746,7 @@
     S.schema = d.schema; S.tabs = d.tabs; S.defaults = d.defaults; S.presets = d.presets; S.photo = d.photo; S.updatedAt = d.updatedAt;
     if (!d.savedInDb && !quiet) flash("Database not connected: changes won't survive a restart. Add DATABASE_URL on Render.", "err");
     if (!keepDirty) setDirty(false);
+    Live.schedule();
   }
 
   async function preview() {
@@ -554,6 +773,7 @@
 
   // ---------- Start ----------
   $("saveBtn").onclick = save; $("saveBtn2").onclick = save;
+  ["input", "change", "click"].forEach((ev) => $("main").addEventListener(ev, refreshLive));
   $("previewBtn").onclick = preview; $("previewBtn2").onclick = preview;
   addEventListener("hashchange", () => { const id = location.hash.slice(1); if (S.content && id && id !== S.tab) go(id); });
   $("menuBtn").onclick = (e) => { e.stopPropagation(); $("menuList").classList.toggle("hidden"); };
@@ -566,6 +786,7 @@
     try {
       await Promise.all([loadContent(), loadLeads()]);
       buildNav();
+      Live.init();
       go(location.hash.slice(1) || "leads");
       draftBanner();
     } catch (e) {

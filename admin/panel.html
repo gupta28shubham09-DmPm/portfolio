@@ -7,14 +7,15 @@
   <title>Admin panel · Digital Shubham</title>
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@700;800&family=Manrope:wght@500;600;700;800&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="/admin/admin.css?v=5" />
+  <link rel="stylesheet" href="/admin/admin.css?v=7" />
 </head>
 <body>
   <header class="topbar">
     <div class="brand">Digital<span>Shubham</span><small>Admin</small></div>
     <div class="save-state" id="saveState"><i></i><span>All changes saved</span></div>
     <a class="btn btn-sm" href="/" target="_blank" rel="noopener" title="View website"><span class="hide-sm">View website&nbsp;</span>↗</a>
-    <button class="btn btn-sm" id="previewBtn" title="See your unsaved changes on the full website">👁 <span class="hide-sm">Preview</span></button>
+    <button class="btn btn-sm live-toggle" id="liveBtn" title="Show or hide the live preview">▣ <span class="hide-sm">Live preview</span></button>
+    <button class="btn btn-sm" id="previewBtn" title="Open your unsaved changes on the full website in a new tab">👁 <span class="hide-sm">Full preview</span></button>
     <button class="btn btn-primary btn-sm" id="saveBtn" disabled>Save changes</button>
     <div class="menu">
       <button class="btn btn-sm btn-icon" id="menuBtn" aria-label="Account menu">⋯</button>
@@ -30,12 +31,31 @@
   <div class="layout">
     <nav class="side" id="side"></nav>
     <main class="main" id="main"><p class="page-sub">Loading your panel…</p></main>
+    <aside class="live" id="live" aria-label="Live preview of your website">
+      <div class="live-head">
+        <b>Live preview</b>
+        <span class="live-state" id="liveState"><i></i><span>Up to date</span></span>
+        <div class="seg" role="group" aria-label="Screen size">
+          <button type="button" class="on" data-device="desktop" title="Desktop">🖥</button>
+          <button type="button" data-device="mobile" title="Mobile">📱</button>
+        </div>
+        <button type="button" class="btn btn-sm btn-icon" id="liveReload" title="Refresh preview">⟳</button>
+        <button type="button" class="btn btn-sm btn-icon" id="liveClose" title="Hide preview">✕</button>
+      </div>
+      <div class="live-stage" id="liveStage">
+        <div class="live-screen" id="liveScreen">
+          <iframe id="liveA" title="Website preview" tabindex="-1"></iframe>
+          <iframe id="liveB" title="Website preview" tabindex="-1"></iframe>
+        </div>
+      </div>
+      <p class="live-foot">Shows your unsaved changes. Visitors see them only after you click <b>Save changes</b>.</p>
+    </aside>
   </div>
 
-  <div class="savebar" id="savebar"><b>You have unsaved changes</b><span><button class="btn btn-sm" id="previewBtn2">Preview</button> <button class="btn btn-primary btn-sm" id="saveBtn2">Save changes</button></span></div>
+  <div class="savebar" id="savebar"><b>You have unsaved changes</b><span><button class="btn btn-sm" id="previewBtn2">Full preview</button> <button class="btn btn-primary btn-sm" id="saveBtn2">Save changes</button></span></div>
   <div class="flash" id="flash" role="status"></div>
 
-  <script src="/admin/numbers.js?v=3"></script>
-  <script src="/admin/panel.js?v=7"></script>
+  <script src="/admin/numbers.js?v=4"></script>
+  <script src="/admin/panel.js?v=9"></script>
 </body>
 </html>

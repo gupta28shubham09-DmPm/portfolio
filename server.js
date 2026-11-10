@@ -180,10 +180,12 @@ async function handleAdminApi(req, res, url) {
     const c = await content();
     const data = normalize(b.content, c.data);
     const banner = '<div style="position:fixed;left:50%;top:84px;transform:translateX(-50%);z-index:99;background:#ffc83d;color:#111;font:700 13px system-ui;padding:8px 14px;border-radius:100px;box-shadow:0 10px 30px rgba(0,0,0,.4);pointer-events:none">PREVIEW · not saved yet</div>';
-    const html = render(data, { base: baseUrl(req), photoUrl: c.photoUrl }).replace(/<body([^>]*)>/, (mm) => mm + banner);
+    // live = the small preview inside the panel: no banner, no scroll animations (everything shows at once)
+    let html = render(data, { base: baseUrl(req), photoUrl: c.photoUrl });
+    html = b.live ? html.replace(/(<body[^>]*?)data-anim="[^"]*"/, '$1data-anim="off"') : html.replace(/<body([^>]*)>/, (mm) => mm + banner);
     const token = crypto.randomBytes(18).toString("base64url");
     previews.set(token, { html, expires: Date.now() + 15 * 60e3 });
-    if (previews.size > 20) previews.delete(previews.keys().next().value);
+    if (previews.size > 40) previews.delete(previews.keys().next().value);
     return json(res, 200, { url: `/admin/preview/${token}` });
   }
   if (p === "/api/admin/photo" && m === "PUT") {
@@ -254,6 +256,7 @@ async function handle(req, res) {
     const buf = Buffer.from(m.data, "base64");
     return send(res, 200, buf, { "Content-Type": m.mime, "Content-Length": buf.length, "Cache-Control": "public, max-age=31536000, immutable" });
   }
+  if (p === "/favicon.ico") { res.writeHead(204, { "Cache-Control": "public, max-age=86400" }); return res.end(); }
   if (p === "/robots.txt") {
     return send(res, 200, `User-agent: *\nDisallow: /admin\nDisallow: /api/\nSitemap: ${baseUrl(req)}/sitemap.xml\n`, { "Content-Type": "text/plain; charset=utf-8" });
   }

@@ -39,7 +39,9 @@ copy of your login is stored · "Log out everywhere" in the ⋯ menu signs out e
 ## Text formatting inside the panel
 `*word*` = yellow highlight · `~word~` = blue highlight · `**word**` = bold
 
-## Experience (Experience & skills › How experience is shown)
+## Experience (🎓 Experience & skills)
+- Each job has a calendar: pick the month you started and ended, or switch on “I currently work here”
+- The panel warns about missing or wrong dates and shows any gap between jobs, with a one-click way to hide it
 - Job dates on the website: as typed, month & year, years only, duration only, dates + duration, years + duration, "Since …", or hidden
 - Duration style: 2 yrs 11 mos · 2 years 11 months · 2y 11m · 2.9 yrs · 3 yrs (rounded) · 2+ years
 - Years counted from only the time you worked (gaps skipped) or from your first job until today
