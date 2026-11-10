@@ -196,7 +196,7 @@
     if (node.t === "textarea") input = h("textarea", { value: value ?? "", maxLength: node.max || 3000, oninput: onInput });
     else if (node.t === "select") input = h("select", { onchange: onInput, "data-path": path.join(".") }, node.options.map(([v, l]) => h("option", { value: v, text: l, selected: v === value })));
     else if (node.t === "color") {
-      const custom = () => { if (isTheme && S.content.theme.preset !== "custom") { S.content.theme.preset = "custom"; const sel = document.querySelector('[data-path="theme.preset"]'); if (sel) sel.value = "custom"; } };
+      const custom = () => { if (isTheme && path[1] !== "iconCustom" && S.content.theme.preset !== "custom") { S.content.theme.preset = "custom"; const sel = document.querySelector('[data-path="theme.preset"]'); if (sel) sel.value = "custom"; } };
       const text = h("input", { type: "text", value: value || "#2F5BFF", maxLength: 7, "data-path": path.join("."), oninput: (e) => { set(path, e.target.value); custom(); pick.value = /^#[0-9a-fA-F]{6}$/.test(e.target.value) ? e.target.value : pick.value; } });
       const pick = h("input", { type: "color", value: /^#[0-9a-fA-F]{6}$/.test(value) ? value : "#2f5bff", oninput: (e) => { set(path, e.target.value.toUpperCase()); custom(); text.value = e.target.value.toUpperCase(); } });
       input = h("div.color-row", {}, pick, text);

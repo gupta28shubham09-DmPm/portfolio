@@ -147,11 +147,9 @@ strong { color: var(--heading); font-weight: 700; }
 .hero-sub em { font-style: normal; }
 .hero-cta { display: flex; flex-wrap: wrap; gap: 14px; margin: 34px 0 38px; }
 .hero-social { display: flex; gap: 14px; margin: -12px 0 32px; }
-.hero-social a { width: 54px; height: 54px; border-radius: 50%; display: grid; place-items: center; background: color-mix(in srgb, var(--ink) 6%, transparent); border: 1px solid color-mix(in srgb, var(--ink) 14%, transparent); color: var(--heading); transition: transform .35s var(--ease), background .3s, border-color .3s, box-shadow .3s; }
+.hero-social a { width: 54px; height: 54px; border-radius: 50%; display: grid; place-items: center; background: var(--icon-bg, color-mix(in srgb, var(--ink) 6%, transparent)); border: 1px solid var(--icon-line, color-mix(in srgb, var(--ink) 14%, transparent)); color: var(--icon, var(--heading)); transition: transform .35s var(--ease), background .3s, border-color .3s, box-shadow .3s; }
 .hero-social a:hover { transform: translateY(-4px); background: var(--yellow); border-color: var(--yellow); color: var(--on-accent); box-shadow: 0 12px 28px -10px color-mix(in srgb, var(--yellow) 70%, transparent); }
 .hero-social svg { width: 22px; height: 22px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
-.hero-social img { width: 22px; height: 22px; filter: invert(1); transition: filter .3s; }
-.hero-social a:hover img { filter: none; }
 .soc-in { font-family: var(--body); font-weight: 800; font-size: 19px; letter-spacing: -0.5px; }
 @media (max-width: 760px) { .hero-social a { width: 48px; height: 48px; } }
 .hero-trust { display: flex; align-items: center; flex-wrap: wrap; gap: 16px; color: var(--muted); font-size: 14px; }
@@ -395,7 +393,6 @@ strong { color: var(--heading); font-weight: 700; }
 .wa-float { position: fixed; right: 20px; bottom: 20px; z-index: 40; width: 58px; height: 58px; border-radius: 50%; display: grid; place-items: center; background: #25d366; box-shadow: 0 12px 30px -8px rgba(37, 211, 102, 0.7); transition: transform 0.3s var(--ease); animation: waIn 0.8s 2s var(--ease) both; }
 .wa-float:hover { transform: scale(1.1); }
 .wa-float svg { width: 30px; height: 30px; fill: #fff; }
-.wa-float img { width: 30px; height: 30px; filter: invert(1); }
 .wa-float.solo { bottom: 20px; }
 .custom-ico { font-size: 26px; }
 .stat:last-child { border-right: 0; }
@@ -508,7 +505,10 @@ strong { color: var(--heading); font-weight: 700; }
 .logo-band:hover .logo-track { animation-play-state: paused; }
 .lg { display: inline-flex; align-items: center; gap: 14px; margin-right: 56px; white-space: nowrap; font-family: var(--display); font-weight: 700; font-size: clamp(20px, 2.4vw, 30px); color: var(--heading); }
 .lg-ico { flex: none; width: 42px; height: 42px; border-radius: 12px; display: grid; place-items: center; background: color-mix(in srgb, var(--ink) 6%, transparent); border: 1px solid var(--line); font-style: normal; }
-.lg-ico img { width: 24px; height: 24px; filter: invert(1); }
+.lg-ico { position: relative; color: var(--icon, var(--heading)); }
+.lg-ico img { position: absolute; width: 1px; height: 1px; opacity: 0; pointer-events: none; }
+.lg-mask { width: 24px; height: 24px; background: currentColor; -webkit-mask: var(--src) center / contain no-repeat; mask: var(--src) center / contain no-repeat; }
+.lg-ico.no-img .lg-mask { display: none; }
 .lg-ico b { display: none; font-family: var(--body); font-size: 13px; font-weight: 800; color: #fff; }
 .lg-ico.no-img { background: var(--c, var(--blue)); border-color: transparent; }
 .lg-ico.no-img b { display: block; }
@@ -638,3 +638,11 @@ body[data-anim="off"] .f-rate { opacity: 1; }
 .tl-date:empty { display: none; }
 .exp-total { margin-top: 12px; color: var(--muted); font-size: 15px; }
 .exp-total b { color: var(--yellow); }
+
+/* WhatsApp icon drawn in code: outline + filled handset, both in the icon colour */
+.wa-ico { fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linejoin: round; }
+.wa-ico .fill { fill: currentColor; stroke: none; }
+.hero-social .wa-ico { width: 23px; height: 23px; }
+.wa-float { color: #fff; }
+.wa-float .wa-ico { width: 30px; height: 30px; fill: none; }
+.wa-float .wa-ico .fill { fill: currentColor; }
