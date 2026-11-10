@@ -7,13 +7,14 @@
   <title>Admin panel · Digital Shubham</title>
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@700;800&family=Manrope:wght@500;600;700;800&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="/admin/admin.css?v=1" />
+  <link rel="stylesheet" href="/admin/admin.css?v=3" />
 </head>
 <body>
   <header class="topbar">
     <div class="brand">Digital<span>Shubham</span><small>Admin</small></div>
     <div class="save-state" id="saveState"><i></i><span>All changes saved</span></div>
     <a class="btn btn-sm" href="/" target="_blank" rel="noopener" title="View website"><span class="hide-sm">View website&nbsp;</span>↗</a>
+    <button class="btn btn-sm" id="previewBtn" title="See your unsaved changes on the full website">👁 <span class="hide-sm">Preview</span></button>
     <button class="btn btn-primary btn-sm" id="saveBtn" disabled>Save changes</button>
     <div class="menu">
       <button class="btn btn-sm btn-icon" id="menuBtn" aria-label="Account menu">⋯</button>
@@ -31,9 +32,9 @@
     <main class="main" id="main"><p class="page-sub">Loading your panel…</p></main>
   </div>
 
-  <div class="savebar" id="savebar"><b>You have unsaved changes</b><button class="btn btn-primary btn-sm" id="saveBtn2">Save changes</button></div>
+  <div class="savebar" id="savebar"><b>You have unsaved changes</b><span><button class="btn btn-sm" id="previewBtn2">Preview</button> <button class="btn btn-primary btn-sm" id="saveBtn2">Save changes</button></span></div>
   <div class="flash" id="flash" role="status"></div>
 
-  <script src="/admin/panel.js?v=1"></script>
+  <script src="/admin/panel.js?v=4"></script>
 </body>
 </html>

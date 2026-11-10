@@ -27,6 +27,15 @@ Admin login stays **switched off** until `ADMIN_PASSWORD`, `ADMIN_EMAIL` and `RE
 Security: 5 wrong passwords lock login for 15 minutes · codes work once · only a scrambled
 copy of your login is stored · "Log out everywhere" in the ⋯ menu signs out every device.
 
+## What you can change in the panel
+- **Switches**: turn buttons, strips, pop-ups, your photo and the scroll arrow on/off
+- **Design & layout**: 7 colour themes (or your own colours), heading and body fonts, corner style,
+  button shape, spacing, text size, animation level, section order, photo left/right, your photo
+- **All content**: every text, number and box; add, copy, move or delete boxes; your own new sections
+- **Leads**: status, notes, call/WhatsApp in one tap, download as Excel (CSV)
+- **Preview** shows unsaved changes on the full website; **Versions & undo** keeps the last 30 saves
+- Unsaved work is kept in your browser, so it can be restored if your login expires
+
 ## Text formatting inside the panel
 `*word*` = yellow highlight · `~word~` = blue highlight · `**word**` = bold
 
@@ -34,6 +43,7 @@ copy of your login is stored · "Log out everywhere" in the ⋯ menu signs out e
 - `server.js` – web server, form, admin API
 - `lib/defaults.js` – the original website content (used for "Reset to original")
 - `lib/schema.js` – what the panel lets you edit
+- `lib/theme.js` – colour themes and fonts
 - `lib/render.js` – builds the website page from your content
 - `lib/auth.js`, `lib/db.js`, `lib/mail.js`, `lib/content.js` – login, database, emails, validation
 - `admin/` – the admin panel pages

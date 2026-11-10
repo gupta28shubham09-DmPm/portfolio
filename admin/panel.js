@@ -27,7 +27,7 @@
       headers: { "X-Admin-Request": "1", ...(body ? { "Content-Type": "application/json" } : {}) },
       body: body ? JSON.stringify(body) : undefined,
     });
-    if (r.status === 401) { S.dirty = false; location.replace("/admin/login"); throw new Error("Logged out"); }
+    if (r.status === 401) { if (S.dirty) saveDraft(); S.dirty = false; location.replace("/admin/login"); throw new Error("Logged out"); }
     const data = await r.json().catch(() => ({}));
     if (!r.ok) throw new Error(data.error || `Error ${r.status}`);
     return data;
@@ -45,8 +45,13 @@
   }
 
   // ---------- Unsaved-changes state ----------
+  const DRAFT = "ds_admin_draft";
+  let draftTimer;
+  const saveDraft = () => { try { localStorage.setItem(DRAFT, JSON.stringify({ content: S.content, base: S.updatedAt, at: Date.now() })); } catch {} };
+  const clearDraft = () => { clearTimeout(draftTimer); try { localStorage.removeItem(DRAFT); } catch {} };
   function setDirty(v) {
     S.dirty = v;
+    if (v) { clearTimeout(draftTimer); draftTimer = setTimeout(saveDraft, 500); }
     $("saveState").classList.toggle("dirty", v);
     $("saveState").lastElementChild.textContent = v ? "Unsaved changes" : "All changes saved";
     $("saveBtn").disabled = !v;
@@ -68,6 +73,7 @@
     if (node.t === "list") return [];
     if (node.t === "toggle") return node.label === "Show this section" || node.label === "Show this card";
     if (node.t === "select") return node.options[0][0];
+    if (node.t === "order") return node.options.map((o) => o[0]);
     if (node.t === "color") return "#2F5BFF";
     return "";
   }
@@ -92,6 +98,8 @@
     }
     if (node.t === "group") return groupBlock(node, path, onChange, true);
     if (node.t === "list") return listBlock(node, path);
+    if (node.t === "order") return orderBlock(node, path);
+    const isTheme = path[0] === "theme";
 
     const wrap = h("div.f");
     const hint = h("span.hint", { text: node.help || "" });
@@ -102,17 +110,67 @@
       hint.textContent = res === true ? node.help || "" : res;
     };
     let input;
-    const onInput = (e) => { const v = e.target.value; set(path, v); validate(v.trim()); onChange && onChange(); };
+    const onInput = (e) => {
+      const v = e.target.value; set(path, v); validate(v.trim()); onChange && onChange();
+      if (isTheme && path[1] === "preset") applyPreset(v);
+    };
     if (node.t === "textarea") input = h("textarea", { value: value ?? "", maxLength: node.max || 3000, oninput: onInput });
-    else if (node.t === "select") input = h("select", { onchange: onInput }, node.options.map(([v, l]) => h("option", { value: v, text: l, selected: v === value })));
+    else if (node.t === "select") input = h("select", { onchange: onInput, "data-path": path.join(".") }, node.options.map(([v, l]) => h("option", { value: v, text: l, selected: v === value })));
     else if (node.t === "color") {
-      const text = h("input", { type: "text", value: value || "#2F5BFF", maxLength: 7, oninput: (e) => { set(path, e.target.value); pick.value = /^#[0-9a-fA-F]{6}$/.test(e.target.value) ? e.target.value : pick.value; } });
-      const pick = h("input", { type: "color", value: /^#[0-9a-fA-F]{6}$/.test(value) ? value : "#2f5bff", oninput: (e) => { set(path, e.target.value.toUpperCase()); text.value = e.target.value.toUpperCase(); } });
+      const custom = () => { if (isTheme && S.content.theme.preset !== "custom") { S.content.theme.preset = "custom"; const sel = document.querySelector('[data-path="theme.preset"]'); if (sel) sel.value = "custom"; } };
+      const text = h("input", { type: "text", value: value || "#2F5BFF", maxLength: 7, "data-path": path.join("."), oninput: (e) => { set(path, e.target.value); custom(); pick.value = /^#[0-9a-fA-F]{6}$/.test(e.target.value) ? e.target.value : pick.value; } });
+      const pick = h("input", { type: "color", value: /^#[0-9a-fA-F]{6}$/.test(value) ? value : "#2f5bff", oninput: (e) => { set(path, e.target.value.toUpperCase()); custom(); text.value = e.target.value.toUpperCase(); } });
       input = h("div.color-row", {}, pick, text);
     } else input = h("input", { type: "text", value: value ?? "", maxLength: node.max || 300, inputMode: node.t === "num" ? "decimal" : undefined, oninput: onInput });
     wrap.append(h("label.lbl", { text: node.label }), input, hint);
     if (node.t !== "select" && node.t !== "color") validate(String(value ?? ""));
     return wrap;
+  }
+
+  // Picking a ready-made theme fills in its colours (you can still tweak them; that switches to "Custom")
+  function applyPreset(key) {
+    const p = S.presets && S.presets[key];
+    if (!p) return;
+    for (const k of ["bg", "bg2", "accent", "accent2", "text", "muted"]) {
+      S.content.theme[k] = p[k];
+      const t = document.querySelector(`[data-path="theme.${k}"]`);
+      if (t) { t.value = p[k]; const pick = t.previousElementSibling; if (pick) pick.value = p[k].toLowerCase(); }
+    }
+    swatch();
+  }
+  function swatch() {
+    const box = document.getElementById("themeSwatch");
+    if (!box) return;
+    const t = S.content.theme, p = t.preset !== "custom" && S.presets[t.preset] ? S.presets[t.preset] : t;
+    box.style.background = p.bg; box.style.color = p.text; box.style.borderColor = p.bg2;
+    box.querySelector(".sw-card").style.background = p.bg2;
+    box.querySelector(".sw-btn").style.background = p.accent;
+    box.querySelector(".sw-btn").style.color = luminance(p.accent) > 0.4 ? "#111" : "#fff";
+    box.querySelector(".sw-blue").style.color = p.accent2;
+    box.querySelector(".sw-muted").style.color = p.muted;
+    box.querySelector(".sw-title").style.fontFamily = `"${t.headingFont}", sans-serif`;
+  }
+  function luminance(hex) {
+    const n = parseInt(String(hex).replace("#", ""), 16) || 0;
+    return [n >> 16, (n >> 8) & 255, n & 255].map((v) => { v /= 255; return v <= 0.03928 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4; }).reduce((a, v, i) => a + v * [0.2126, 0.7152, 0.0722][i], 0);
+  }
+
+  // Section order: move sections up and down (nothing can be deleted here; hide sections with their own switch)
+  function orderBlock(node, path) {
+    const holder = h("div.list");
+    const labels = Object.fromEntries(node.options);
+    const draw = () => {
+      const arr = get(path);
+      const rows = arr.map((k, i) => h("div.item", {}, h("div.item-head.static", {},
+        h("span.num", { text: i + 1 }), h("span.title", { text: labels[k] || k }),
+        h("div.item-tools", {},
+          h("button.btn.btn-sm.btn-icon", { title: "Move up", text: "↑", disabled: i === 0, onclick: () => { [arr[i - 1], arr[i]] = [arr[i], arr[i - 1]]; setDirty(true); draw(); } }),
+          h("button.btn.btn-sm.btn-icon", { title: "Move down", text: "↓", disabled: i === arr.length - 1, onclick: () => { [arr[i + 1], arr[i]] = [arr[i], arr[i + 1]]; setDirty(true); draw(); } })))));
+      fill(holder, h("div.list-head", {}, h("label.lbl", { text: node.label })), h("div.items", {}, rows),
+        h("p.hint", { text: "The top section always stays first. To hide a section, use its own “Show this section” switch." }));
+    };
+    draw();
+    return holder;
   }
 
   function groupBlock(node, path, onChange, nested) {
@@ -135,16 +193,27 @@
       const move = (i, d) => { const j = i + d; if (j < 0 || j >= arr.length) return; [arr[i], arr[j]] = [arr[j], arr[i]]; remapOpen(i, j); setDirty(true); draw(); };
       const remapOpen = (i, j) => { const a = key(i), b = key(j), ai = S.open.has(a), bi = S.open.has(b); S.open.delete(a); S.open.delete(b); if (ai) S.open.add(b); if (bi) S.open.add(a); };
       const key = (i) => path.concat(i).join(".");
+      const shiftOpen = (from, d) => {
+        const prefix = path.join(".") + ".";
+        const moved = [...S.open].filter((k) => k.startsWith(prefix)).map((k) => [k, k.slice(prefix.length)]);
+        moved.forEach(([k]) => S.open.delete(k));
+        moved.forEach(([k, rest]) => {
+          const [idx, ...tail] = rest.split("."); const n = Number(idx);
+          if (d < 0 && n === from) return; // the deleted box
+          const ni = n > from ? n + d : n; // boxes after the change move by one
+          S.open.add([prefix + ni, ...tail].join("."));
+        });
+      };
       const tools = (i) => {
         const del = h("button.btn.btn-sm.btn-icon.btn-danger", { title: "Delete", text: "✕", onclick: (e) => {
           e.stopPropagation();
           if (!del.classList.contains("confirm")) { del.classList.add("confirm"); del.textContent = "Delete?"; del.classList.remove("btn-icon"); setTimeout(() => { del.classList.remove("confirm"); del.textContent = "✕"; del.classList.add("btn-icon"); }, 3000); return; }
-          arr.splice(i, 1); S.open.delete(key(i)); setDirty(true); draw();
+          arr.splice(i, 1); shiftOpen(i, -1); setDirty(true); draw();
         } });
         return h("div.item-tools", {},
           h("button.btn.btn-sm.btn-icon", { title: "Move up", text: "↑", disabled: i === 0, onclick: (e) => { e.stopPropagation(); move(i, -1); } }),
           h("button.btn.btn-sm.btn-icon", { title: "Move down", text: "↓", disabled: i === arr.length - 1, onclick: (e) => { e.stopPropagation(); move(i, 1); } }),
-          isGroup ? h("button.btn.btn-sm.btn-icon", { title: "Duplicate", text: "⧉", disabled: arr.length >= max, onclick: (e) => { e.stopPropagation(); arr.splice(i + 1, 0, JSON.parse(JSON.stringify(arr[i]))); setDirty(true); draw(); } }) : null,
+          isGroup ? h("button.btn.btn-sm.btn-icon", { title: "Duplicate", text: "⧉", disabled: arr.length >= max, onclick: (e) => { e.stopPropagation(); shiftOpen(i, 1); arr.splice(i + 1, 0, JSON.parse(JSON.stringify(arr[i]))); setDirty(true); draw(); } }) : null,
           del);
       };
       arr.forEach((val, i) => {
@@ -187,10 +256,55 @@
     for (const key of tab.keys) {
       const node = S.schema.fields[key];
       const card = h("section.card", {}, h("h2", { text: node.label || key }), node.help ? h("p.help", { text: node.help }) : null);
+      if (key === "theme") card.append(h("div.swatch", { id: "themeSwatch" },
+        h("div.sw-card", {}, h("b.sw-title", { text: "Sample heading" }), h("p.sw-muted", { text: "This is how soft text looks." }), h("span.sw-blue", { text: "Second accent" })),
+        h("span.sw-btn", { text: "Button" })), h("p.hint", { text: "Tip: use “Preview” (top right) to see the full website with your new look before saving." }));
       if (node.t === "list") card.append(h("div.fields", {}, listBlock(node, [key])));
-      else card.append(groupBlock(node, [key], null, false));
+      else card.append(groupBlock(node, [key], key === "theme" ? swatch : null, false));
       main.append(card);
     }
+    if (tab.id === "design") main.append(photoCard());
+    swatch();
+  }
+
+  function photoCard() {
+    const img = h("img.photo-prev", { src: S.photo.url, alt: "Your current photo" });
+    const status = h("p.hint", { text: S.photo.custom ? "You're using an uploaded photo." : "You're using the original photo." });
+    const input = h("input", { type: "file", accept: "image/jpeg,image/png,image/webp", class: "hidden", onchange: async (e) => {
+      const file = e.target.files[0]; if (!file) return;
+      try {
+        status.textContent = "Uploading…";
+        const dataUrl = await shrink(file);
+        await api("PUT", "/api/admin/photo", { dataUrl });
+        await loadContent(true); flash("✓ Photo updated on your website.");
+        go("design");
+      } catch (err) { status.textContent = ""; flash(err.message, "err"); }
+    } });
+    const reset = h("button.btn.btn-sm", { text: "Use original photo", disabled: !S.photo.custom, onclick: async () => {
+      if (!reset.classList.contains("confirm")) { reset.classList.add("btn-danger", "confirm"); reset.textContent = "Sure? Click again"; setTimeout(() => { reset.classList.remove("btn-danger", "confirm"); reset.textContent = "Use original photo"; }, 3000); return; }
+      try { await api("DELETE", "/api/admin/photo"); await loadContent(true); flash("Original photo restored."); go("design"); } catch (err) { flash(err.message, "err"); }
+    } });
+    return h("section.card", {}, h("h2", { text: "Your photo" }),
+      h("p.help", { text: "Shown on the top section and when your link is shared. A tall portrait photo (4:5) looks best. It changes on the website immediately, without clicking Save." }),
+      h("div.photo-row", {}, img, h("div", {}, h("button.btn.btn-primary.btn-sm", { text: "Upload new photo", onclick: () => input.click() }), " ", reset, status, input)));
+  }
+  // Resize big phone photos in the browser before uploading (max 1000px, good quality)
+  function shrink(file) {
+    return new Promise((resolve, reject) => {
+      if (!/^image\/(jpeg|png|webp)$/.test(file.type)) return reject(new Error("Please choose a JPG, PNG or WebP image."));
+      if (file.size > 25e6) return reject(new Error("That image is too big (max 25 MB)."));
+      const reader = new FileReader(); const im = new Image();
+      im.onload = () => {
+        const scale = Math.min(1, 1000 / Math.max(im.width, im.height));
+        const cv = document.createElement("canvas"); cv.width = Math.round(im.width * scale); cv.height = Math.round(im.height * scale);
+        cv.getContext("2d").drawImage(im, 0, 0, cv.width, cv.height);
+        resolve(cv.toDataURL("image/jpeg", 0.86));
+      };
+      im.onerror = () => reject(new Error("Couldn't read that image."));
+      reader.onload = () => { im.src = reader.result; };
+      reader.onerror = () => reject(new Error("Couldn't read that file."));
+      reader.readAsDataURL(file);
+    });
   }
 
   const fmtDate = (d) => new Date(d).toLocaleString("en-IN", { timeZone: "Asia/Kolkata", day: "numeric", month: "short", year: "numeric", hour: "numeric", minute: "2-digit" });
@@ -275,7 +389,7 @@
       const b = h("button.btn.btn-sm", { text: label, onclick: async () => {
         if (S.dirty) return flash("Save or discard your current changes first.", "err");
         if (!b.classList.contains("confirm")) { b.classList.add("btn-danger", "confirm"); b.textContent = "Sure? Click again"; setTimeout(() => { b.classList.remove("btn-danger", "confirm"); b.textContent = label; }, 3000); return; }
-        try { await run(); await loadContent(); flash("Done! Your website has been updated."); versionsPage(); } catch (e) { flash(e.message, "err"); }
+        try { await run(); await loadContent(); clearDraft(); flash("Done! Your website has been updated."); versionsPage(); } catch (e) { flash(e.message, "err"); }
       } });
       return b;
     };
@@ -322,8 +436,8 @@
     $("saveBtn").textContent = "Saving…";
     try {
       const r = await api("PUT", "/api/admin/content", { content: S.content });
-      S.content = r.content;
-      setDirty(false);
+      S.content = r.content; S.updatedAt = r.updatedAt || S.updatedAt;
+      setDirty(false); clearDraft();
       if (r.warnings && r.warnings.length) flash("Saved, but some values weren't valid and were kept as before:", "err", r.warnings);
       else flash("✓ Saved! Your website is updated.");
       if (S.tab !== "leads" && S.tab !== "versions") go(S.tab);
@@ -335,15 +449,40 @@
     }
   }
 
-  async function loadContent() {
+  async function loadContent(quiet) {
     const d = await api("GET", "/api/admin/content");
-    S.content = d.content; S.schema = d.schema; S.tabs = d.tabs; S.defaults = d.defaults;
-    if (!d.savedInDb) flash("Database not connected: changes won't survive a restart. Add DATABASE_URL on Render.", "err");
-    setDirty(false);
+    const keepDirty = quiet && S.dirty;
+    if (!keepDirty) S.content = d.content;
+    S.schema = d.schema; S.tabs = d.tabs; S.defaults = d.defaults; S.presets = d.presets; S.photo = d.photo; S.updatedAt = d.updatedAt;
+    if (!d.savedInDb && !quiet) flash("Database not connected: changes won't survive a restart. Add DATABASE_URL on Render.", "err");
+    if (!keepDirty) setDirty(false);
+  }
+
+  async function preview() {
+    const win = window.open("about:blank", "_blank"); // opened first so pop-up blockers allow it
+    try {
+      const r = await api("POST", "/api/admin/preview", { content: S.content });
+      if (win) win.location.href = r.url; else location.href = r.url;
+    } catch (e) { if (win) win.close(); flash(`Preview failed: ${e.message}`, "err"); }
+  }
+
+  // Offer to bring back unsaved work from last time (e.g. after the login expired)
+  function draftBanner() {
+    let d = null;
+    try { d = JSON.parse(localStorage.getItem(DRAFT) || "null"); } catch {}
+    if (!d || !d.content || JSON.stringify(d.content) === JSON.stringify(S.content)) { clearDraft(); return; }
+    const when = new Date(d.at).toLocaleString("en-IN", { timeZone: "Asia/Kolkata", dateStyle: "medium", timeStyle: "short" });
+    const older = d.base !== S.updatedAt;
+    const bar = h("div.notice.draft", {}, h("b", { text: `You have unsaved changes from ${when}. ` }),
+      older ? "The website was saved after that, so restoring will replace those newer changes. " : "",
+      h("button.btn.btn-primary.btn-sm", { text: "Restore them", onclick: () => { S.content = d.content; setDirty(true); bar.remove(); go(S.tab); flash("Unsaved changes restored. Click Save to publish them."); } }), " ",
+      h("button.btn.btn-sm", { text: "Discard", onclick: () => { clearDraft(); bar.remove(); } }));
+    document.querySelector(".layout").before(bar);
   }
 
   // ---------- Start ----------
   $("saveBtn").onclick = save; $("saveBtn2").onclick = save;
+  $("previewBtn").onclick = preview; $("previewBtn2").onclick = preview;
   addEventListener("hashchange", () => { const id = location.hash.slice(1); if (S.content && id && id !== S.tab) go(id); });
   $("menuBtn").onclick = (e) => { e.stopPropagation(); $("menuList").classList.toggle("hidden"); };
   document.addEventListener("click", () => $("menuList").classList.add("hidden"));
@@ -356,6 +495,7 @@
       await Promise.all([loadContent(), loadLeads()]);
       buildNav();
       go(location.hash.slice(1) || "leads");
+      draftBanner();
     } catch (e) {
       if (e.message !== "Logged out") fill($("main"), h("div.notice", { text: `Couldn't load the panel: ${e.message}` }));
     }

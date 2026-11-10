@@ -1,8 +1,10 @@
 (() => {
   const $ = (s, el = document) => el.querySelector(s);
   const $$ = (s, el = document) => [...el.querySelectorAll(s)];
-  const fine = matchMedia("(pointer: fine)").matches;
-  const reduce = matchMedia("(prefers-reduced-motion: reduce)").matches;
+  // Animation level comes from the admin panel: full | calm | off
+  const anim = document.body.dataset.anim || "full";
+  const fine = matchMedia("(pointer: fine)").matches && anim === "full";
+  const reduce = matchMedia("(prefers-reduced-motion: reduce)").matches || anim === "off";
   const SITE = window.SITE || {};
   const C = SITE.contact || {};
 
@@ -130,8 +132,10 @@
 
   // ---- Mobile menu ----
   const burger = $("#burger"), links = $("#navLinks");
-  burger.addEventListener("click", () => { burger.classList.toggle("open"); links.classList.toggle("open"); });
-  $$("a", links).forEach((a) => a.addEventListener("click", () => { burger.classList.remove("open"); links.classList.remove("open"); }));
+  if (burger) {
+    burger.addEventListener("click", () => { burger.classList.toggle("open"); links.classList.toggle("open"); });
+    $$("a", links).forEach((a) => a.addEventListener("click", () => { burger.classList.remove("open"); links.classList.remove("open"); }));
+  }
 
   // ---- Desktop-only pointer effects ----
   if (fine && !reduce) {
@@ -159,20 +163,6 @@
     });
   }
 
-  // ---- Work filters ----
-  $$(".filter").forEach((f) =>
-    f.addEventListener("click", () => {
-      $$(".filter").forEach((x) => x.classList.remove("active"));
-      f.classList.add("active");
-      const cat = f.dataset.filter;
-      $$(".work").forEach((w) => {
-        const show = cat === "all" || w.dataset.cat === cat || w.dataset.cat === "all";
-        w.classList.toggle("hidden", !show);
-        if (show) { w.classList.remove("in"); requestAnimationFrame(() => w.classList.add("in")); }
-      });
-    })
-  );
-
   // ---- "Book a Call" buttons: scroll to the form, pop it up and show a hint ----
   const leadForm = $("#leadForm"), hint = $("#formHint");
   if (leadForm) $$(".js-book").forEach((btn) =>
@@ -197,7 +187,7 @@
   const isAndroid = /Android/i.test(ua);
   const inApp = /; wv\)|FBAN|FBAV|Instagram|Line\//i.test(ua);
   const isFirefox = /Firefox/i.test(ua);
-  const vcfUrl = new URL("contact.vcf", location.href).href;
+  const vcfUrl = new URL("/contact.vcf", location.href).href;
   const enc = encodeURIComponent;
   const contactIntent =
     "intent:#Intent;action=android.intent.action.INSERT;type=vnd.android.cursor.dir/raw_contact;" +

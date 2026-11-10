@@ -6,7 +6,9 @@ const path = require("path");
 const db = require("./lib/db");
 const auth = require("./lib/auth");
 const { normalize, problems, defaults } = require("./lib/content");
+const crypto = require("crypto");
 const { schema, tabs } = require("./lib/schema");
+const { PRESETS } = require("./lib/theme");
 const { render, vcard } = require("./lib/render");
 const { mail, whatsappAlert } = require("./lib/mail");
 
@@ -18,13 +20,32 @@ const ADMIN = path.join(__dirname, "admin");
 let cache = null;
 async function content() {
   if (cache) return cache;
-  let saved = null;
+  let saved = null, photo = null;
   try { saved = await db.getContent(); } catch (e) { console.error("Loading content failed, using defaults:", e.message); }
+  try { photo = await db.getMedia("profile", false); } catch (e) { console.error("Loading photo info failed:", e.message); }
   const data = normalize(saved ? saved.data : null);
-  cache = { data, html: render(data), updatedAt: saved ? saved.updated_at : null };
+  const photoUrl = photo ? `media/profile?v=${new Date(photo.updated_at).getTime()}` : "img/shubham.jpg";
+  cache = { data, photoUrl, customPhoto: !!photo, updatedAt: saved ? saved.updated_at : null, html: new Map() };
   return cache;
 }
 const clearCache = () => { cache = null; };
+
+// Your site address, worked out from the request (works for onrender.com and your own domain)
+function baseUrl(req) {
+  const host = String(req.headers["x-forwarded-host"] || req.headers.host || "").split(",")[0].trim().replace(/[^A-Za-z0-9.:-]/g, "");
+  const proto = req.headers["x-forwarded-proto"] === "https" || /onrender\.com$|\.[a-z]{2,}$/.test(host) && !/^localhost|^127\./.test(host) ? "https" : "http";
+  return host ? `${proto}://${host}` : "";
+}
+async function pageHtml(req) {
+  const c = await content();
+  const base = baseUrl(req);
+  if (!c.html.has(base)) c.html.set(base, render(c.data, { base, photoUrl: c.photoUrl }));
+  return c.html.get(base);
+}
+
+// Previews of unsaved changes (admin only, kept 15 minutes)
+const previews = new Map();
+setInterval(() => { const now = Date.now(); for (const [k, v] of previews) if (v.expires < now) previews.delete(k); }, 60e3).unref();
 
 // ---- Small helpers ----
 const MIME = { ".html": "text/html; charset=utf-8", ".css": "text/css; charset=utf-8", ".js": "text/javascript; charset=utf-8",
@@ -136,7 +157,7 @@ async function handleAdminApi(req, res, url) {
 
   if (p === "/api/admin/content" && m === "GET") {
     const c = await content();
-    return json(res, 200, { content: c.data, updatedAt: c.updatedAt, schema, tabs, defaults, savedInDb: db.usingDb() });
+    return json(res, 200, { content: c.data, updatedAt: c.updatedAt, schema, tabs, defaults, presets: PRESETS, savedInDb: db.usingDb(), photo: { url: "/" + c.photoUrl, custom: c.customPhoto } });
   }
   if (p === "/api/admin/content" && m === "PUT") {
     const b = await readBody(req, 600e3);
@@ -146,8 +167,34 @@ async function handleAdminApi(req, res, url) {
     const data = normalize(b.content, current);
     await db.saveContent(data, current);
     clearCache();
-    return json(res, 200, { ok: true, content: data, warnings: issues });
+    return json(res, 200, { ok: true, content: data, warnings: issues, updatedAt: (await content()).updatedAt });
   }
+  if (p === "/api/admin/preview" && m === "POST") {
+    const b = await readBody(req, 600e3);
+    if (!b || typeof b.content !== "object") return json(res, 400, { error: "Nothing to preview." });
+    const c = await content();
+    const data = normalize(b.content, c.data);
+    const banner = '<div style="position:fixed;left:50%;top:84px;transform:translateX(-50%);z-index:99;background:#ffc83d;color:#111;font:700 13px system-ui;padding:8px 14px;border-radius:100px;box-shadow:0 10px 30px rgba(0,0,0,.4);pointer-events:none">PREVIEW · not saved yet</div>';
+    const html = render(data, { base: baseUrl(req), photoUrl: c.photoUrl }).replace(/<body([^>]*)>/, (mm) => mm + banner);
+    const token = crypto.randomBytes(18).toString("base64url");
+    previews.set(token, { html, expires: Date.now() + 15 * 60e3 });
+    if (previews.size > 20) previews.delete(previews.keys().next().value);
+    return json(res, 200, { url: `/admin/preview/${token}` });
+  }
+  if (p === "/api/admin/photo" && m === "PUT") {
+    const b = await readBody(req, 4e6);
+    const mm = typeof b.dataUrl === "string" && b.dataUrl.match(/^data:(image\/(?:jpeg|png|webp));base64,([A-Za-z0-9+/=]+)$/);
+    if (!mm) return json(res, 400, { error: "Please upload a JPG, PNG or WebP image." });
+    const buf = Buffer.from(mm[2], "base64");
+    const sig = { "image/jpeg": [0xff, 0xd8, 0xff], "image/png": [0x89, 0x50, 0x4e, 0x47] }[mm[1]];
+    const okSig = mm[1] === "image/webp" ? buf.slice(0, 4).toString() === "RIFF" && buf.slice(8, 12).toString() === "WEBP" : sig.every((v, i) => buf[i] === v);
+    if (!okSig) return json(res, 400, { error: "That file isn't a real image." });
+    if (buf.length > 2.5e6) return json(res, 413, { error: "Image is too large (max 2.5 MB)." });
+    await db.setMedia("profile", mm[1], buf.toString("base64"));
+    clearCache();
+    return json(res, 200, { ok: true });
+  }
+  if (p === "/api/admin/photo" && m === "DELETE") { await db.deleteMedia("profile"); clearCache(); return json(res, 200, { ok: true }); }
   if (p === "/api/admin/history" && m === "GET") return json(res, 200, { history: await db.listHistory() });
   const hm = p.match(/^\/api\/admin\/history\/(\d+)\/restore$/);
   if (hm && m === "POST") {
@@ -194,12 +241,32 @@ async function handle(req, res) {
   if (m !== "GET" && m !== "HEAD") return json(res, 405, { error: "Method not allowed." });
 
   if (p === "/" || p === "/index.html") {
+    return send(res, 200, await pageHtml(req), { "Content-Type": "text/html; charset=utf-8", "Cache-Control": "no-cache" });
+  }
+  if (p === "/media/profile") {
+    const m = await db.getMedia("profile").catch(() => null);
+    if (!m) { res.writeHead(302, { Location: "/img/shubham.jpg" }); return res.end(); }
+    const buf = Buffer.from(m.data, "base64");
+    return send(res, 200, buf, { "Content-Type": m.mime, "Content-Length": buf.length, "Cache-Control": "public, max-age=31536000, immutable" });
+  }
+  if (p === "/robots.txt") {
+    return send(res, 200, `User-agent: *\nDisallow: /admin\nDisallow: /api/\nSitemap: ${baseUrl(req)}/sitemap.xml\n`, { "Content-Type": "text/plain; charset=utf-8" });
+  }
+  if (p === "/sitemap.xml") {
     const c = await content();
-    return send(res, 200, c.html, { "Content-Type": "text/html; charset=utf-8", "Cache-Control": "no-cache" });
+    const last = (c.updatedAt ? new Date(c.updatedAt) : new Date()).toISOString().slice(0, 10);
+    return send(res, 200, `<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9"><url><loc>${baseUrl(req)}/</loc><lastmod>${last}</lastmod></url></urlset>\n`, { "Content-Type": "application/xml; charset=utf-8" });
+  }
+  const pv = p.match(/^\/admin\/preview\/([A-Za-z0-9_-]{20,})$/);
+  if (pv) {
+    if (!(await auth.isAdmin(req))) { res.writeHead(302, { Location: "/admin/login" }); return res.end(); }
+    const item = previews.get(pv[1]);
+    if (!item) return send(res, 404, "This preview has expired. Click Preview again in your panel.", { "Content-Type": "text/plain; charset=utf-8" });
+    return send(res, 200, item.html, { "Content-Type": "text/html; charset=utf-8", "Cache-Control": "no-store", "X-Robots-Tag": "noindex" });
   }
   if (p === "/contact.vcf" || p === "/shubham-gupta.vcf") {
     const c = await content();
-    const host = req.headers.host ? `https://${String(req.headers.host).replace(/[^A-Za-z0-9.:-]/g, "")}` : "";
+    const host = baseUrl(req);
     const fname = (c.data.contact.name || "contact").replace(/[^A-Za-z0-9]+/g, "-");
     return send(res, 200, vcard(c.data, host), { "Content-Type": "text/vcard; charset=utf-8", "Content-Disposition": `inline; filename="${fname}.vcf"`, "Cache-Control": "no-cache" });
   }
@@ -216,8 +283,7 @@ async function handle(req, res) {
   if (p.endsWith(".html")) { res.writeHead(302, { Location: "/" }); return res.end(); }
   if (serveFile(res, PUBLIC, p)) return;
 
-  const c = await content();
-  return send(res, 404, c.html, { "Content-Type": "text/html; charset=utf-8", "Cache-Control": "no-cache" });
+  return send(res, 404, await pageHtml(req), { "Content-Type": "text/html; charset=utf-8", "Cache-Control": "no-cache" });
 }
 
 const server = http.createServer((req, res) => {
