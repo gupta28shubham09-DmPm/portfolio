@@ -117,6 +117,7 @@
     const y = scrollY, h = document.documentElement.scrollHeight - innerHeight;
     bar.style.width = `${(y / h) * 100}%`;
     nav.classList.toggle("scrolled", y > 30);
+    document.body.classList.toggle("floats-hidden", y < innerHeight * 0.6);
     lastY = y;
     if (tl && fill) {
       const r = tl.getBoundingClientRect();

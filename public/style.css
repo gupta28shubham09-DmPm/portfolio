@@ -679,3 +679,23 @@ body[data-anim="off"] .f-rate { opacity: 1; }
 #hireForm { scroll-margin-top: 90px; }
 @media (max-width: 960px) { .hire-grid { grid-template-columns: 1fr; gap: 36px; } }
 @media (max-width: 520px) { .hire-facts { grid-template-columns: 1fr; } }
+
+/* ===== Phone fixes ===== */
+@media (max-width: 760px) {
+  /* menu bar: logo left, buttons + menu icon always on the right (even with no button) */
+  .nav .logo { margin-right: auto; }
+  .nav .btn-sm, .nav .nav-second + .btn { margin-left: 0; }
+  .burger { flex: none; margin-right: -4px; }
+}
+/* funnel bars grow from 0: keep their text inside while they grow */
+.f-row { overflow: hidden; min-width: 0; }
+.f-row span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.f-row b { flex: none; }
+@media (max-width: 760px) {
+  /* open menu: solid panel so the page behind doesn't show through */
+  .nav-links { background: var(--bg-2); box-shadow: 0 24px 60px -20px rgba(0, 0, 0, 0.8); }
+  .nav-links a { color: var(--text-2, var(--heading)); }
+  /* floating Call / WhatsApp buttons: appear once you scroll past the top section (the same icons are already there) */
+  .wa-float, .call-float { transition: opacity .35s var(--ease), visibility .35s, transform .35s var(--ease); }
+  body.floats-hidden .wa-float, body.floats-hidden .call-float { opacity: 0; visibility: hidden; pointer-events: none; }
+}
