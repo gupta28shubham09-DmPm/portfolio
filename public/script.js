@@ -163,21 +163,21 @@
     });
   }
 
-  // ---- "Book a Call" buttons: scroll to the form, pop it up and show a hint ----
-  const leadForm = $("#leadForm"), hint = $("#formHint");
-  if (leadForm) $$(".js-book").forEach((btn) =>
-    btn.addEventListener("click", (e) => {
-      e.preventDefault();
-      leadForm.classList.add("in");
-      leadForm.scrollIntoView({ behavior: reduce ? "auto" : "smooth", block: "center" });
-      setTimeout(() => {
-        leadForm.classList.remove("pop"); void leadForm.offsetWidth; leadForm.classList.add("pop");
-        hint.classList.add("show");
-        leadForm.name.focus({ preventScroll: true });
-      }, reduce ? 0 : 700);
-      setTimeout(() => leadForm.classList.remove("pop"), 3200);
-    })
-  );
+  // ---- "Book a Call" / "Hire Me" buttons: scroll to the right form, pop it up and show a hint ----
+  const popForm = (f) => {
+    if (!f) return;
+    const hint = $(".form-hint", f);
+    f.classList.add("in");
+    f.scrollIntoView({ behavior: reduce ? "auto" : "smooth", block: "center" });
+    setTimeout(() => {
+      f.classList.remove("pop"); void f.offsetWidth; f.classList.add("pop");
+      if (hint) hint.classList.add("show");
+      const first = f.querySelector("input:not(.hp)"); if (first) first.focus({ preventScroll: true });
+    }, reduce ? 0 : 700);
+    setTimeout(() => f.classList.remove("pop"), 3200);
+  };
+  $$(".js-book").forEach((btn) => btn.addEventListener("click", (e) => { const f = $("#leadForm"); if (f) { e.preventDefault(); popForm(f); } }));
+  $$(".js-hire").forEach((btn) => btn.addEventListener("click", (e) => { const f = $("#hireForm"); if (f) { e.preventDefault(); popForm(f); } }));
 
   // ---- "Save my number": opens the phone's Add Contact screen pre-filled ----
   // Android (Chrome / Samsung Internet): native "New contact" screen via an intent, no file download.
@@ -206,42 +206,49 @@
     })
   );
 
-  // ---- Contact form -> /api/contact (Neon). Falls back to WhatsApp if the server is unreachable ----
-  const form = $("#leadForm");
-  if (!form) return;
-  const note = $("#formNote"), label = $(".btn-label", form);
-  const submitText = SITE.submitText || "Send Message";
+  // ---- Forms (clients + job offers) -> /api/contact (Neon). Fall back to WhatsApp if the server is unreachable ----
   const firstName = (C.name || "").split(" ")[0];
-  const waLink = (d) =>
-    "https://wa.me/" + (C.whatsapp || "") + "?text=" +
-    encodeURIComponent(`Hi ${firstName}, I'm ${d.name}. I need help with ${d.service} (budget: ${d.budget}). ${d.message || ""}`);
+  $$(".js-lead-form").forEach((form) => {
+    const kind = form.dataset.kind === "hire" ? "hire" : "client";
+    const note = $(".form-note", form), label = $(".btn-label", form), hint = $(".form-hint", form);
+    const submitText = label.textContent;
+    const success = (kind === "hire" ? SITE.hireSuccessText : SITE.successText) || "Thank you! I'll get back to you soon.";
+    const waLink = (d) => "https://wa.me/" + (C.whatsapp || "") + "?text=" + encodeURIComponent(kind === "hire"
+      ? `Hi ${firstName}, I'm ${d.name} from ${d.company}. We'd like to talk to you about a ${d.budget} role: ${d.service || "marketing"}. ${d.message || ""}`
+      : `Hi ${firstName}, I'm ${d.name}. I need help with ${d.service} (budget: ${d.budget}). ${d.message || ""}`);
+    const bad = (field, msg) => { if (field) field.classList.add("invalid"); note.className = "form-note err"; note.textContent = msg; };
 
-  form.addEventListener("submit", async (e) => {
-    e.preventDefault();
-    const d = Object.fromEntries(new FormData(form));
-    $$("input, textarea", form).forEach((i) => i.classList.remove("invalid"));
-    if (!d.name.trim()) { form.name.classList.add("invalid"); note.className = "form-note err"; note.textContent = "Please enter your name."; return; }
-    if (!d.email.trim() && !d.phone.trim()) {
-      form.email.classList.add("invalid"); form.phone.classList.add("invalid");
-      note.className = "form-note err"; note.textContent = "Please add an email or phone number so I can reach you."; return;
-    }
-    label.textContent = "Sending…"; note.textContent = "";
-    try {
-      const res = await fetch("/api/contact", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(d) });
-      const out = await res.json().catch(() => ({}));
-      if (!res.ok || !out.ok) throw new Error(out.error || "Could not send");
-      form.reset();
-      note.className = "form-note ok";
-      note.textContent = SITE.successText || "Thank you! I'll get back to you soon.";
-      if (hint) hint.classList.remove("show");
-    } catch (err) {
-      note.className = "form-note err";
-      note.textContent = "Couldn't send right now. ";
-      const a = document.createElement("a");
-      a.href = waLink(d); a.target = "_blank"; a.rel = "noopener"; a.textContent = "Send it on WhatsApp instead →";
-      note.appendChild(a);
-    } finally {
-      label.textContent = submitText;
-    }
+    form.addEventListener("submit", async (e) => {
+      e.preventDefault();
+      const d = Object.fromEntries(new FormData(form));
+      d.kind = kind;
+      $$("input, textarea", form).forEach((i) => i.classList.remove("invalid"));
+      if (kind === "hire" && !String(d.company || "").trim()) return bad(form.company, "Please enter the company name.");
+      if (!String(d.name || "").trim()) return bad(form.name, "Please enter your name.");
+      if (!String(d.email || "").trim() && !String(d.phone || "").trim()) {
+        form.phone.classList.add("invalid");
+        return bad(form.email, "Please add an email or phone number so I can reach you.");
+      }
+      label.textContent = "Sending…"; note.textContent = "";
+      try {
+        const res = await fetch("/api/contact", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(d) });
+        const out = await res.json().catch(() => ({}));
+        if (!res.ok || !out.ok) throw new Error(out.error || "Could not send");
+        form.reset();
+        note.className = "form-note ok";
+        note.textContent = success;
+        if (hint) hint.classList.remove("show");
+      } catch (err) {
+        note.className = "form-note err";
+        note.textContent = (err && err.message && err.message !== "Could not send" && err.message !== "Failed to fetch" ? err.message + " " : "Couldn't send right now. ");
+        if (C.whatsapp) {
+          const a = document.createElement("a");
+          a.href = waLink(d); a.target = "_blank"; a.rel = "noopener"; a.textContent = "Send it on WhatsApp instead →";
+          note.appendChild(a);
+        }
+      } finally {
+        label.textContent = submitText;
+      }
+    });
   });
 })();

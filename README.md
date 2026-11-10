@@ -39,6 +39,12 @@ copy of your login is stored · "Log out everywhere" in the ⋯ menu signs out e
 ## Text formatting inside the panel
 `*word*` = yellow highlight · `~word~` = blue highlight · `**word**` = bold
 
+## Hire me & website mode (💼 tab)
+- **Website mode**: Business (clients: Book a Call), Portfolio (jobs: Hire Me is the main button, "Open to work" badge) or Both
+- **Hire me section**: job-search status, roles, quick facts, why hire me, resume button (upload a PDF or add a link), LinkedIn button
+- Its own form (company, role, job type): job offers arrive in **Leads** marked 💼 Job offer, with their own email alert
+- Switch the section, the menu button and the top-section button on/off separately; "Not looking" status hides all Hire Me buttons
+
 ## Experience (🎓 Experience & skills)
 - Each job has a calendar: pick the month you started and ended, or switch on “I currently work here”
 - The panel warns about missing or wrong dates and shows any gap between jobs, with a one-click way to hide it
@@ -63,6 +69,7 @@ Every number is typed once and used anywhere with a tag like `{cpl}`. Change it 
 - `lib/schema.js` – what the panel lets you edit
 - `lib/theme.js` – colour themes and fonts
 - `lib/render.js` – builds the website page from your content
+- `/resume.pdf` serves your uploaded resume
 - `lib/numbers.js` – the calculator for {tags}; `lib/upgrade.js` – updates older saved content
 - `lib/auth.js`, `lib/db.js`, `lib/mail.js`, `lib/content.js` – login, database, emails, validation
 - `admin/` – the admin panel pages

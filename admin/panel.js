@@ -33,7 +33,7 @@
     return data;
   };
 
-  const S = { live: [], content: null, schema: null, tabs: [], defaults: null, dirty: false, tab: "leads", open: new Set(), leads: [], statuses: [], filter: "all", q: "", savedInDb: true };
+  const S = { kind: "all", live: [], content: null, schema: null, tabs: [], defaults: null, dirty: false, tab: "leads", open: new Set(), leads: [], statuses: [], filter: "all", q: "", savedInDb: true };
 
   // Parts of the page that recalculate as you type (previews, calculated values)
   let liveTimer;
@@ -41,7 +41,7 @@
 
   // ---------- Live preview (right side): your website with unsaved changes ----------
   const Live = (() => {
-    const SECTION = { hero: "top", about: "#about", results: "#results", experience: "#experience", contact: "#contact", more: "#contact", numbers: "#stats", switches: "top", design: "top" };
+    const SECTION = { hire: "#hire", hero: "top", about: "#about", results: "#results", experience: "#experience", contact: "#contact", more: "#contact", numbers: "#stats", switches: "top", design: "top" };
     let timer, busy = false, again = false, front = "liveA", device = "desktop", lastUrl = "";
     const store = (k, v) => { try { v === undefined ? localStorage.getItem(k) : localStorage.setItem(k, v); } catch {} };
     const read = (k) => { try { return localStorage.getItem(k); } catch { return null; } };
@@ -363,6 +363,7 @@
     else { const warn = tagWarnings(); if (warn) main.append(warn); }
     for (const key of tab.keys) {
       if (key === "experience") { experienceCards().forEach((cd) => main.append(cd)); continue; }
+      if (key === "siteMode") { main.append(modeCard()); continue; }
       const node = S.schema.fields[key];
       const card = h("section.card", {}, h("h2", { text: node.label || key }), node.help ? h("p.help", { text: node.help }) : null);
       if (key === "theme") card.append(h("div.swatch", { id: "themeSwatch" },
@@ -373,6 +374,7 @@
       main.append(card);
     }
     if (tab.id === "design") main.append(photoCard());
+    if (tab.id === "hire") main.append(resumeCard());
 
     swatch();
   }
@@ -554,6 +556,52 @@
     return card;
   }
 
+  // ---------- Website mode: business / portfolio / both ----------
+  function modeCard() {
+    const node = S.schema.fields.siteMode;
+    const grid = h("div.tiles.mode-tiles");
+    const summary = h("div.mode-sum");
+    const ICON = { business: "🤝", portfolio: "💼", both: "✨" };
+    const draw = () => {
+      const cur = S.content.siteMode, H = S.content.hire;
+      fill(grid, node.options.map(([v, name, desc]) => h("button.tile", { type: "button", class: v === cur ? "on" : "", onclick: () => { set(["siteMode"], v); draw(); refreshLive(); } },
+        h("span.tile-name", { text: `${ICON[v]} ${name}` }), h("span.tile-desc", { text: desc }))));
+      const lines = cur === "business"
+        ? ["“Book a Call” button in the menu and top section", "Hire me section and Hire Me buttons are hidden", "Leads come from the client form"]
+        : [cur === "portfolio" ? `“${H.buttonText || "Hire Me"}” is the main button (menu + top section)` : `“Book a Call” stays main; “${H.buttonText || "Hire Me"}” is added next to it`,
+          cur === "portfolio" ? `Top badge shows: “${H.statusText || "—"}”` : "Top badge stays your normal availability text",
+          H.show ? "Hire me section is shown (with its own form)" : "⚠ Hire me section is switched off below, so Hire Me buttons won't show",
+          H.status === "closed" ? "⚠ Status is “Not looking”, so Hire Me buttons are hidden" : "Job offers arrive in 📥 Leads, marked 💼 Job offer"];
+      fill(summary, h("b", { text: "What visitors will see:" }), h("ul", {}, lines.map((t) => h("li", { text: t }))));
+    };
+    S.live.push(() => { if (grid.isConnected) draw(); });
+    draw();
+    return h("section.card", {}, h("h2", { text: "Website mode" }),
+      h("p.help", { text: "Switch your whole website between a business site for clients and a portfolio for jobs, any time. Your content stays; only the buttons and sections change." }),
+      grid, summary);
+  }
+  function resumeCard() {
+    const status = h("p.hint", { text: S.resume.url ? "✓ A resume PDF is uploaded. Visitors can open it from the Hire me section." : "No resume uploaded yet." });
+    const input = h("input", { type: "file", accept: "application/pdf", class: "hidden", onchange: async (e) => {
+      const file = e.target.files[0]; if (!file) return;
+      if (file.size > 5e6) return flash("PDF is too large (max 5 MB).", "err");
+      try {
+        status.textContent = "Uploading…";
+        const dataUrl = await new Promise((ok, no) => { const r = new FileReader(); r.onload = () => ok(r.result); r.onerror = () => no(new Error("Couldn't read the file")); r.readAsDataURL(file); });
+        await api("PUT", "/api/admin/resume", { dataUrl: dataUrl.replace(/^data:[^;]*;/, "data:application/pdf;") });
+        await loadContent(true); flash("✓ Resume uploaded."); go("hire");
+      } catch (err) { status.textContent = ""; flash(err.message, "err"); }
+    } });
+    const remove = h("button.btn.btn-sm", { text: "Remove resume", disabled: !S.resume.url, onclick: async () => {
+      if (!remove.classList.contains("confirm")) { remove.classList.add("btn-danger", "confirm"); remove.textContent = "Sure? Click again"; setTimeout(() => { remove.classList.remove("btn-danger", "confirm"); remove.textContent = "Remove resume"; }, 3000); return; }
+      try { await api("DELETE", "/api/admin/resume"); await loadContent(true); flash("Resume removed."); go("hire"); } catch (err) { flash(err.message, "err"); }
+    } });
+    return h("section.card", {}, h("h2", { text: "📄 Your resume (PDF)" }),
+      h("p.help", { text: "Upload your latest resume. It's used by the resume button in the Hire me section (unless you add a Google Drive link above). It changes on the website immediately." }),
+      h("div", {}, h("button.btn.btn-primary.btn-sm", { text: S.resume.url ? "Upload a new PDF" : "Upload PDF", onclick: () => input.click() }), " ",
+        S.resume.url ? h("a.btn.btn-sm", { href: S.resume.url, target: "_blank", rel: "noopener", text: "Open current" }) : null, " ", remove, status, input));
+  }
+
   function photoCard() {
     const img = h("img.photo-prev", { src: S.photo.url, alt: "Your current photo" });
     const status = h("p.hint", { text: S.photo.custom ? "You're using an uploaded photo." : "You're using the original photo." });
@@ -614,13 +662,16 @@
     const list = h("div.leads");
     const draw = () => {
       const q = S.q.toLowerCase();
-      const rows = S.leads.filter((l) => (S.filter === "all" || l.status === S.filter) &&
-        (!q || [l.name, l.phone, l.email, l.service, l.message, l.note].join(" ").toLowerCase().includes(q)));
+      const rows = S.leads.filter((l) => (S.filter === "all" || l.status === S.filter) && (S.kind === "all" || (l.kind || "client") === S.kind) &&
+        (!q || [l.name, l.company, l.phone, l.email, l.service, l.message, l.note].join(" ").toLowerCase().includes(q)));
       fill(list, ...(rows.length ? rows.map(leadCard) : [h("div.empty-state", { text: S.leads.length ? "No leads match this filter." : "No leads yet. When someone fills in your website form, they'll appear here." })]));
     };
     const chips = h("div.chips", {}, ["all", ...S.statuses].map((s) => h("button.chip", {
       class: S.filter === s ? "active" : "", onclick: () => { S.filter = s; leadsPage(); },
     }, s === "all" ? "All" : STATUS_LABEL[s] || s, h("span.c", { text: s === "all" ? S.leads.length : count(s) }))));
+    const kinds = h("div.chips", {}, [["all", "All types"], ["client", "🤝 Clients"], ["hire", "💼 Job offers"]].map(([k, t]) => h("button.chip", {
+      class: S.kind === k ? "active" : "", onclick: () => { S.kind = k; leadsPage(); },
+    }, t, h("span.c", { text: k === "all" ? S.leads.length : S.leads.filter((l) => (l.kind || "client") === k).length }))));
     const search = h("input.input.search", { type: "search", placeholder: "Search name, phone, message…", value: S.q, oninput: (e) => { S.q = e.target.value; draw(); } });
     fill(main, 
       h("h1.page-title", { text: "📥 Leads" }),
@@ -631,7 +682,7 @@
         h("div.stat-box", {}, h("b", { text: count("new") }), h("span", { text: "New (not contacted)" })),
         h("div.stat-box", {}, h("b", { text: count("contacted") }), h("span", { text: "Contacted" })),
         h("div.stat-box", {}, h("b", { text: count("converted") }), h("span", { text: "Converted" }))),
-      h("div.lead-tools", {}, chips, search,
+      h("div.lead-tools", {}, kinds, chips, search,
         h("button.btn.btn-sm", { text: "↻ Refresh", onclick: async () => { await loadLeads(); leadsPage(); flash("Leads refreshed"); } }),
         h("a.btn.btn-sm", { href: "/api/admin/leads.csv", text: "⬇ Download Excel (CSV)" })),
       list);
@@ -654,13 +705,14 @@
       onchange: async (e) => { if (await patch({ note: e.target.value })) flash("Note saved"); } });
     const card = h("article", { class: `lead st-${l.status}` },
       h("div", {},
-        h("h3", { text: l.name }),
+        h("h3", {}, l.name, l.company ? h("span.lead-co", { text: ` · ${l.company}` }) : null,
+          h("span", { class: `kind-badge ${l.kind === "hire" ? "hire" : "client"}`, text: l.kind === "hire" ? "💼 Job offer" : "🤝 Client" })),
         h("div.meta", {},
           h("span", { text: fmtDate(l.created_at) }),
           l.phone ? h("a", { href: `tel:${l.phone.replace(/[^+\d]/g, "")}`, text: `📞 ${l.phone}` }) : null,
           l.phone ? h("a", { href: `https://wa.me/${waNum(l.phone)}`, target: "_blank", rel: "noopener", text: "💬 WhatsApp" }) : null,
           l.email ? h("a", { href: `mailto:${l.email}`, text: `✉️ ${l.email}` }) : null),
-        h("div.meta", {}, l.service ? h("span.tag", { text: l.service }) : null, l.budget ? h("span.tag", { text: `Budget: ${l.budget}` }) : null)),
+        h("div.meta", {}, l.service ? h("span.tag", { text: l.kind === "hire" ? `Role: ${l.service}` : l.service }) : null, l.budget ? h("span.tag", { text: l.kind === "hire" ? l.budget : `Budget: ${l.budget}` }) : null)),
       h("div.side-tools", {}, status, del),
       l.message ? h("div.msgtext", { text: l.message }) : null,
       h("div.note", {}, note));
@@ -743,7 +795,7 @@
     const d = await api("GET", "/api/admin/content");
     const keepDirty = quiet && S.dirty;
     if (!keepDirty) S.content = d.content;
-    S.schema = d.schema; S.tabs = d.tabs; S.defaults = d.defaults; S.presets = d.presets; S.photo = d.photo; S.updatedAt = d.updatedAt;
+    S.schema = d.schema; S.tabs = d.tabs; S.defaults = d.defaults; S.presets = d.presets; S.photo = d.photo; S.resume = d.resume || { url: "" }; S.updatedAt = d.updatedAt;
     if (!d.savedInDb && !quiet) flash("Database not connected: changes won't survive a restart. Add DATABASE_URL on Render.", "err");
     if (!keepDirty) setDirty(false);
     Live.schedule();

@@ -347,3 +347,15 @@ body.live-on .main { padding-left: 26px; padding-right: 26px; }
 .job-more[open] > *:not(summary) { animation: rise .3s var(--ease) both; }
 @media (prefers-reduced-motion: reduce) { *, *::before, *::after { animation: none !important; transition: none !important; } }
 @media (min-width: 1101px) { body.live-on .savebar { left: calc(240px + (100vw - 240px - var(--live-w)) / 2); } }
+
+/* Website mode + leads types */
+.mode-tiles { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+.mode-tiles .tile-name { font-size: 15px; }
+.mode-sum { margin-top: 14px; padding: 14px 16px; border-radius: 12px; background: var(--bg-2); font-size: 13.5px; }
+.mode-sum ul { margin: 6px 0 0 18px; display: grid; gap: 3px; }
+.kind-badge { display: inline-block; margin-left: 10px; vertical-align: 2px; font-size: 11.5px; font-weight: 800; padding: 2px 9px; border-radius: 100px; }
+.kind-badge.hire { background: rgba(47,91,255,.12); color: var(--blue-2); }
+.kind-badge.client { background: rgba(255,194,61,.2); color: var(--ink); }
+.lead-co { color: var(--muted); font-weight: 600; }
+.lead-tools { flex-wrap: wrap; }
+@media (max-width: 760px) { .mode-tiles { grid-template-columns: 1fr; } }

@@ -24,9 +24,12 @@ async function content() {
   let saved = null, photo = null;
   try { saved = await db.getContent(); } catch (e) { console.error("Loading content failed, using defaults:", e.message); }
   try { photo = await db.getMedia("profile", false); } catch (e) { console.error("Loading photo info failed:", e.message); }
+  let resume = null;
+  try { resume = await db.getMedia("resume", false); } catch (e) { console.error("Loading resume info failed:", e.message); }
   const data = normalize(saved ? saved.data : null);
   const photoUrl = photo ? `media/profile?v=${new Date(photo.updated_at).getTime()}` : "img/shubham.jpg";
-  cache = { data, photoUrl, customPhoto: !!photo, updatedAt: saved ? saved.updated_at : null, html: new Map() };
+  const resumeUrl = resume ? `/resume.pdf?v=${new Date(resume.updated_at).getTime()}` : "";
+  cache = { data, photoUrl, resumeUrl, customPhoto: !!photo, updatedAt: saved ? saved.updated_at : null, html: new Map() };
   return cache;
 }
 const clearCache = () => { cache = null; };
@@ -40,7 +43,7 @@ function baseUrl(req) {
 async function pageHtml(req) {
   const c = await content();
   const base = baseUrl(req);
-  if (!c.html.has(base)) c.html.set(base, render(c.data, { base, photoUrl: c.photoUrl }));
+  if (!c.html.has(base)) c.html.set(base, render(c.data, { base, photoUrl: c.photoUrl, resumeUrl: c.resumeUrl }));
   return c.html.get(base);
 }
 
@@ -110,7 +113,8 @@ const clean = (v, max) => (typeof v === "string" ? v.replace(/[\u0000-\u001F\u00
 async function handleContact(req, res) {
   const b = await readBody(req, 20e3);
   if (b.website) return json(res, 200, { ok: true }); // honeypot for bots
-  const lead = { name: clean(b.name, 120), email: clean(b.email, 160), phone: clean(b.phone, 30), service: clean(b.service, 80), budget: clean(b.budget, 60), message: clean(b.message, 2000) };
+  const kind = b.kind === "hire" ? "hire" : "client";
+  const lead = { kind, company: clean(b.company, 120), name: clean(b.name, 120), email: clean(b.email, 160), phone: clean(b.phone, 30), service: clean(b.service, 80), budget: clean(b.budget, 60), message: clean(b.message, 2000) };
   if (!lead.name || (!lead.email && !lead.phone)) return json(res, 400, { ok: false, error: "Please share your name and an email or phone number." });
   if (lead.email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(lead.email)) return json(res, 400, { ok: false, error: "That email doesn't look right." });
   if (formLimited(clientIp(req))) return json(res, 429, { ok: false, error: "Too many requests. Please try again in a few minutes." });
@@ -158,7 +162,7 @@ async function handleAdminApi(req, res, url) {
 
   if (p === "/api/admin/content" && m === "GET") {
     const c = await content();
-    return json(res, 200, { content: c.data, updatedAt: c.updatedAt, schema, tabs, defaults, presets: PRESETS, savedInDb: db.usingDb(), photo: { url: "/" + c.photoUrl, custom: c.customPhoto } });
+    return json(res, 200, { content: c.data, updatedAt: c.updatedAt, schema, tabs, defaults, presets: PRESETS, savedInDb: db.usingDb(), photo: { url: "/" + c.photoUrl, custom: c.customPhoto }, resume: { url: c.resumeUrl } });
   }
   if (p === "/api/admin/content" && m === "PUT") {
     const b = await readBody(req, 600e3);
@@ -181,7 +185,7 @@ async function handleAdminApi(req, res, url) {
     const data = normalize(b.content, c.data);
     const banner = '<div style="position:fixed;left:50%;top:84px;transform:translateX(-50%);z-index:99;background:#ffc83d;color:#111;font:700 13px system-ui;padding:8px 14px;border-radius:100px;box-shadow:0 10px 30px rgba(0,0,0,.4);pointer-events:none">PREVIEW · not saved yet</div>';
     // live = the small preview inside the panel: no banner, no scroll animations (everything shows at once)
-    let html = render(data, { base: baseUrl(req), photoUrl: c.photoUrl });
+    let html = render(data, { base: baseUrl(req), photoUrl: c.photoUrl, resumeUrl: c.resumeUrl });
     html = b.live ? html.replace(/(<body[^>]*?)data-anim="[^"]*"/, '$1data-anim="off"') : html.replace(/<body([^>]*)>/, (mm) => mm + banner);
     const token = crypto.randomBytes(18).toString("base64url");
     previews.set(token, { html, expires: Date.now() + 15 * 60e3 });
@@ -201,6 +205,18 @@ async function handleAdminApi(req, res, url) {
     clearCache();
     return json(res, 200, { ok: true });
   }
+  if (p === "/api/admin/resume" && m === "PUT") {
+    const b = await readBody(req, 7e6);
+    const mm = typeof b.dataUrl === "string" && b.dataUrl.match(/^data:application\/pdf;base64,([A-Za-z0-9+/=]+)$/);
+    if (!mm) return json(res, 400, { error: "Please upload a PDF file." });
+    const buf = Buffer.from(mm[1], "base64");
+    if (buf.slice(0, 5).toString() !== "%PDF-") return json(res, 400, { error: "That file isn't a real PDF." });
+    if (buf.length > 5e6) return json(res, 413, { error: "PDF is too large (max 5 MB)." });
+    await db.setMedia("resume", "application/pdf", buf.toString("base64"));
+    clearCache();
+    return json(res, 200, { ok: true });
+  }
+  if (p === "/api/admin/resume" && m === "DELETE") { await db.deleteMedia("resume"); clearCache(); return json(res, 200, { ok: true }); }
   if (p === "/api/admin/photo" && m === "DELETE") { await db.deleteMedia("profile"); clearCache(); return json(res, 200, { ok: true }); }
   if (p === "/api/admin/history" && m === "GET") return json(res, 200, { history: await db.listHistory() });
   const hm = p.match(/^\/api\/admin\/history\/(\d+)\/restore$/);
@@ -215,9 +231,9 @@ async function handleAdminApi(req, res, url) {
   if (p === "/api/admin/leads" && m === "GET") return json(res, 200, { leads: await db.listLeads(), statuses: STATUSES, savedInDb: db.usingDb() });
   if (p === "/api/admin/leads.csv" && m === "GET") {
     const rows = await db.listLeads();
-    const head = ["Date (IST)", "Name", "Phone", "Email", "Service", "Budget", "Message", "Status", "Note"];
+    const head = ["Date (IST)", "Type", "Name", "Company", "Phone", "Email", "Service / Role", "Budget / Job type", "Message", "Status", "Note"];
     const lines = [head.map(csvCell).join(",")].concat(rows.map((l) => [
-      new Date(l.created_at).toLocaleString("en-IN", { timeZone: "Asia/Kolkata" }), l.name, l.phone, l.email, l.service, l.budget, l.message, l.status, l.note,
+      new Date(l.created_at).toLocaleString("en-IN", { timeZone: "Asia/Kolkata" }), l.kind === "hire" ? "Job offer" : "Client", l.name, l.company, l.phone, l.email, l.service, l.budget, l.message, l.status, l.note,
     ].map(csvCell).join(",")));
     return send(res, 200, "﻿" + lines.join("\r\n"), { "Content-Type": "text/csv; charset=utf-8", "Content-Disposition": `attachment; filename="leads-${new Date().toISOString().slice(0, 10)}.csv"`, "Cache-Control": "no-store" });
   }
@@ -255,6 +271,13 @@ async function handle(req, res) {
     if (!m) { res.writeHead(302, { Location: "/img/shubham.jpg" }); return res.end(); }
     const buf = Buffer.from(m.data, "base64");
     return send(res, 200, buf, { "Content-Type": m.mime, "Content-Length": buf.length, "Cache-Control": "public, max-age=31536000, immutable" });
+  }
+  if (p === "/resume.pdf") {
+    const r = await db.getMedia("resume").catch(() => null);
+    if (!r) return send(res, 404, "No resume uploaded yet.", { "Content-Type": "text/plain; charset=utf-8" });
+    const buf = Buffer.from(r.data, "base64");
+    const name = ((await content()).data.contact.name || "Resume").replace(/[^A-Za-z0-9]+/g, "-");
+    return send(res, 200, buf, { "Content-Type": "application/pdf", "Content-Length": buf.length, "Content-Disposition": `inline; filename="${name}-Resume.pdf"`, "Cache-Control": "no-cache" });
   }
   if (p === "/favicon.ico") { res.writeHead(204, { "Cache-Control": "public, max-age=86400" }); return res.end(); }
   if (p === "/robots.txt") {
