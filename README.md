@@ -1,32 +1,40 @@
-# Shubham Gupta · Portfolio
+# Digital Shubham · Website + Admin Panel
 
-Dark, animated portfolio website. GitHub stores the code, Render hosts it, Neon saves contact-form leads.
+Your portfolio website, with a private admin panel at **/admin** where you can change
+everything (text, numbers, boxes, on/off switches) and manage leads, without touching code.
+
+## How it works
+- **GitHub** stores the code. **Render** runs it. **Neon** stores your leads and your website content.
+- When you click **Save** in the panel, the content is saved in Neon and the website updates instantly.
+- Every save keeps the previous version (last 30), so you can undo from **Versions & undo**.
+
+## Render settings (Environment)
+| Key | Value | Needed for |
+|---|---|---|
+| `DATABASE_URL` | Your Neon connection string | Leads + panel changes |
+| `ADMIN_PASSWORD` | A strong password, 10+ characters | Logging in to /admin |
+| `ADMIN_EMAIL` | Your Gmail address | Where the login code is sent |
+| `RESEND_API_KEY` | Your Resend key (`re_…`) | Login codes + lead emails |
+| `LEAD_EMAIL_TO` | Your Gmail address | New-lead email alerts |
+
+Admin login stays **switched off** until `ADMIN_PASSWORD`, `ADMIN_EMAIL` and `RESEND_API_KEY` are set.
+
+## Logging in
+1. Open `https://your-site/admin`
+2. Enter your password, then the 6-digit code sent to your email (valid 10 minutes)
+3. You stay logged in for 7 days on that device. You get an email for every new login.
+
+Security: 5 wrong passwords lock login for 15 minutes · codes work once · only a scrambled
+copy of your login is stored · "Log out everywhere" in the ⋯ menu signs out every device.
+
+## Text formatting inside the panel
+`*word*` = yellow highlight · `~word~` = blue highlight · `**word**` = bold
 
 ## Files
-- `server.js` – web server + `/api/contact` (saves leads into Neon)
-- `public/index.html` – all page content (edit text here)
-- `public/style.css` – design & colours
-- `public/script.js` – animations & form
-- `public/img/shubham.jpg` – profile photo
-
-## Deploy (one time)
-1. **GitHub** → open your `portfolio` repo → *Add file → Upload files* → drag in everything from this folder (keep the `public` folder structure) → *Commit changes*.
-2. **Neon** → your project → *Connect* → copy the connection string (`postgresql://...`).
-3. **Render** → *New → Web Service* → pick the `portfolio` repo, then set:
-   - Name: `shubhamgupta` (your URL becomes `shubhamgupta.onrender.com`)
-   - Region: Singapore · Runtime: Node
-   - Build command: `npm install`
-   - Start command: `npm start`
-   - Instance type: Free (or Starter to keep it always awake)
-   - Environment variable: `DATABASE_URL` = the Neon string
-   - Click *Deploy Web Service*.
-4. Open the URL, submit a test enquiry, then check **Neon → Tables → leads**.
-
-## Viewing leads
-Neon console → *Tables* → `leads`, or run in the SQL Editor:
-```sql
-SELECT * FROM leads ORDER BY created_at DESC;
-```
-
-## Updating the site
-Edit a file on GitHub (pencil icon) → Commit. Render redeploys automatically in ~1–2 minutes.
+- `server.js` – web server, form, admin API
+- `lib/defaults.js` – the original website content (used for "Reset to original")
+- `lib/schema.js` – what the panel lets you edit
+- `lib/render.js` – builds the website page from your content
+- `lib/auth.js`, `lib/db.js`, `lib/mail.js`, `lib/content.js` – login, database, emails, validation
+- `admin/` – the admin panel pages
+- `public/` – design (style.css), animations (script.js), photo

@@ -1,174 +1,240 @@
-// Portfolio server: serves the website and saves contact-form leads to Neon (Postgres).
+// Digital Shubham website + admin panel.
+// Built on Node's own web server, so the only package needed is "pg" (for Neon).
+const http = require("http");
+const fs = require("fs");
 const path = require("path");
-const express = require("express");
-const { Pool } = require("pg");
+const db = require("./lib/db");
+const auth = require("./lib/auth");
+const { normalize, problems, defaults } = require("./lib/content");
+const { schema, tabs } = require("./lib/schema");
+const { render, vcard } = require("./lib/render");
+const { mail, whatsappAlert } = require("./lib/mail");
 
-const app = express();
 const PORT = process.env.PORT || 3000;
-const DATABASE_URL = process.env.DATABASE_URL;
+const PUBLIC = path.join(__dirname, "public");
+const ADMIN = path.join(__dirname, "admin");
 
-// ---- Database (Neon) ----
-let pool = null;
-if (DATABASE_URL) {
-  pool = new Pool({ connectionString: DATABASE_URL, ssl: { rejectUnauthorized: false } });
-  pool
-    .query(`
-      CREATE TABLE IF NOT EXISTS leads (
-        id SERIAL PRIMARY KEY,
-        name TEXT NOT NULL,
-        email TEXT,
-        phone TEXT,
-        service TEXT,
-        budget TEXT,
-        message TEXT,
-        created_at TIMESTAMPTZ DEFAULT NOW()
-      )`)
-    .then(() => console.log("Neon connected - leads table ready"))
-    .catch((e) => console.error("Database setup failed:", e.message));
-} else {
-  console.warn("DATABASE_URL not set - contact form will not save leads.");
+// ---- Content cache: the page is rebuilt only when you save in the panel ----
+let cache = null;
+async function content() {
+  if (cache) return cache;
+  let saved = null;
+  try { saved = await db.getContent(); } catch (e) { console.error("Loading content failed, using defaults:", e.message); }
+  const data = normalize(saved ? saved.data : null);
+  cache = { data, html: render(data), updatedAt: saved ? saved.updated_at : null };
+  return cache;
+}
+const clearCache = () => { cache = null; };
+
+// ---- Small helpers ----
+const MIME = { ".html": "text/html; charset=utf-8", ".css": "text/css; charset=utf-8", ".js": "text/javascript; charset=utf-8",
+  ".json": "application/json", ".jpg": "image/jpeg", ".jpeg": "image/jpeg", ".png": "image/png", ".webp": "image/webp",
+  ".svg": "image/svg+xml", ".ico": "image/x-icon", ".txt": "text/plain; charset=utf-8", ".woff2": "font/woff2" };
+
+const BASE_HEADERS = { "X-Content-Type-Options": "nosniff", "Referrer-Policy": "strict-origin-when-cross-origin", "X-Frame-Options": "SAMEORIGIN" };
+const ADMIN_HEADERS = {
+  "Cache-Control": "no-store", "X-Frame-Options": "DENY", "X-Robots-Tag": "noindex, nofollow",
+  "Content-Security-Policy": "default-src 'self'; script-src 'self'; style-src 'self' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; img-src 'self' data: https:; connect-src 'self'; frame-ancestors 'none'; base-uri 'none'; form-action 'self'",
+};
+
+function send(res, status, body, headers = {}) {
+  res.writeHead(status, { ...BASE_HEADERS, ...headers });
+  res.end(body);
+}
+const json = (res, status, obj, headers = {}) => send(res, status, JSON.stringify(obj), { "Content-Type": "application/json; charset=utf-8", "Cache-Control": "no-store", ...headers });
+
+function clientIp(req) {
+  const fwd = String(req.headers["x-forwarded-for"] || "").split(",")[0].trim();
+  return fwd || req.socket.remoteAddress || "unknown";
 }
 
-app.use(express.json({ limit: "20kb" }));
-app.use(
-  express.static(path.join(__dirname, "public"), {
-    index: "index.html",
-    setHeaders: (res, filePath) => {
-      // HTML, CSS and JS always re-check for updates; images can be cached for a day
-      if (filePath.endsWith(".vcf")) {
-        // Contact card: phones open it straight in "Add contact"
-        res.setHeader("Content-Type", "text/vcard; charset=utf-8");
-        res.setHeader("Content-Disposition", 'inline; filename="Shubham-Gupta.vcf"');
-        res.setHeader("Cache-Control", "no-cache");
-        return;
-      }
-      if (/\.(html|css|js)$/.test(filePath)) res.setHeader("Cache-Control", "no-cache");
-      else res.setHeader("Cache-Control", "public, max-age=86400");
-    },
-  })
-);
+function readBody(req, limit) {
+  return new Promise((resolve, reject) => {
+    let size = 0; const chunks = [];
+    req.on("data", (c) => { size += c.length; if (size > limit) { reject(Object.assign(new Error("Too large"), { status: 413 })); req.destroy(); } else chunks.push(c); });
+    req.on("end", () => {
+      if (!chunks.length) return resolve({});
+      try { resolve(JSON.parse(Buffer.concat(chunks).toString("utf8"))); } catch { reject(Object.assign(new Error("Bad JSON"), { status: 400 })); }
+    });
+    req.on("error", reject);
+  });
+}
 
-app.get("/health", (_req, res) => res.json({ ok: true }));
+function serveFile(res, root, urlPath, extraHeaders = {}) {
+  let rel;
+  try { rel = decodeURIComponent(urlPath); } catch { return false; }
+  const file = path.normalize(path.join(root, rel));
+  if (!file.startsWith(root + path.sep)) return false; // blocks ../ tricks
+  let stat;
+  try { stat = fs.statSync(file); } catch { return false; }
+  if (!stat.isFile()) return false;
+  const ext = path.extname(file).toLowerCase();
+  const cacheCtl = /\.(css|js|html)$/.test(ext) ? "no-cache" : "public, max-age=86400";
+  res.writeHead(200, { ...BASE_HEADERS, "Content-Type": MIME[ext] || "application/octet-stream", "Content-Length": stat.size, "Cache-Control": cacheCtl, ...extraHeaders });
+  fs.createReadStream(file).pipe(res);
+  return true;
+}
 
-// Simple in-memory rate limit: 5 submissions per IP per 10 minutes
-const hits = new Map();
-function rateLimited(ip) {
+// ---- Public form rate limit: 5 per IP per 10 minutes ----
+const formHits = new Map();
+function formLimited(ip) {
   const now = Date.now();
-  const list = (hits.get(ip) || []).filter((t) => now - t < 10 * 60 * 1000);
-  list.push(now);
-  hits.set(ip, list);
+  const list = (formHits.get(ip) || []).filter((t) => now - t < 600e3);
+  list.push(now); formHits.set(ip, list);
   return list.length > 5;
 }
+const clean = (v, max) => (typeof v === "string" ? v.replace(/[\u0000-\u001F\u007F]/g, " ").trim().slice(0, max) : "");
 
-const clean = (v, max = 500) => (typeof v === "string" ? v.trim().slice(0, max) : "");
-
-app.post("/api/contact", async (req, res) => {
-  const b = req.body || {};
-  if (b.website) return res.json({ ok: true }); // honeypot: bots fill this hidden field
-
-  const lead = {
-    name: clean(b.name, 120),
-    email: clean(b.email, 160),
-    phone: clean(b.phone, 30),
-    service: clean(b.service, 80),
-    budget: clean(b.budget, 60),
-    message: clean(b.message, 2000),
-  };
-
-  if (!lead.name || (!lead.email && !lead.phone)) {
-    return res.status(400).json({ ok: false, error: "Please share your name and an email or phone number." });
-  }
-  if (lead.email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(lead.email)) {
-    return res.status(400).json({ ok: false, error: "That email doesn't look right." });
-  }
-  if (rateLimited(req.ip)) {
-    return res.status(429).json({ ok: false, error: "Too many requests. Please try again in a few minutes." });
-  }
-  if (!pool) return res.status(503).json({ ok: false, error: "Form is not connected yet." });
-
+async function handleContact(req, res) {
+  const b = await readBody(req, 20e3);
+  if (b.website) return json(res, 200, { ok: true }); // honeypot for bots
+  const lead = { name: clean(b.name, 120), email: clean(b.email, 160), phone: clean(b.phone, 30), service: clean(b.service, 80), budget: clean(b.budget, 60), message: clean(b.message, 2000) };
+  if (!lead.name || (!lead.email && !lead.phone)) return json(res, 400, { ok: false, error: "Please share your name and an email or phone number." });
+  if (lead.email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(lead.email)) return json(res, 400, { ok: false, error: "That email doesn't look right." });
+  if (formLimited(clientIp(req))) return json(res, 429, { ok: false, error: "Too many requests. Please try again in a few minutes." });
   try {
-    await pool.query(
-      "INSERT INTO leads (name, email, phone, service, budget, message) VALUES ($1,$2,$3,$4,$5,$6)",
-      [lead.name, lead.email, lead.phone, lead.service, lead.budget, lead.message]
-    );
-    res.json({ ok: true });
-    notifyEmail(lead); // background alerts; they never block or break the form
-    notifyWhatsApp(lead);
+    await db.insertLead(lead);
+    json(res, 200, { ok: true });
+    mail.leadAlert(lead); whatsappAlert(lead);
   } catch (e) {
-    console.error("Insert failed:", e.message);
-    res.status(500).json({ ok: false, error: "Something went wrong. Please WhatsApp me instead." });
+    console.error("Saving lead failed:", e.message);
+    json(res, 500, { ok: false, error: "Something went wrong. Please WhatsApp me instead." });
   }
+}
+
+const csvCell = (v) => {
+  let s = String(v ?? "");
+  if (/^[=+\-@\t\r]/.test(s)) s = "'" + s; // stops Excel formula injection
+  return `"${s.replace(/"/g, '""')}"`;
+};
+const STATUSES = ["new", "contacted", "converted", "not-interested", "spam"];
+
+// ---- Admin API (every route here needs a valid login) ----
+async function handleAdminApi(req, res, url) {
+  const p = url.pathname, m = req.method;
+  const ip = clientIp(req);
+
+  // Login steps (no session needed yet)
+  if (p === "/api/admin/status" && m === "GET") return json(res, 200, { setupProblem: auth.setupProblem(), loggedIn: await auth.isAdmin(req) });
+  if (m !== "GET" && req.headers["x-admin-request"] !== "1") return json(res, 403, { error: "Blocked." }); // CSRF guard
+  if (p === "/api/admin/login" && m === "POST") {
+    const b = await readBody(req, 2e3);
+    const r = await auth.startLogin(b.password, ip);
+    return json(res, r.status, r.error ? { error: r.error } : { loginId: r.loginId, email: r.email });
+  }
+  if (p === "/api/admin/verify" && m === "POST") {
+    const b = await readBody(req, 2e3);
+    const r = await auth.verifyCode(b.loginId, b.code, ip, req.headers["user-agent"]);
+    if (r.error) return json(res, r.status, { error: r.error });
+    return json(res, 200, { ok: true }, { "Set-Cookie": auth.loginCookie(req, r.token) });
+  }
+
+  if (!(await auth.isAdmin(req))) return json(res, 401, { error: "Please log in." });
+
+  if (p === "/api/admin/logout" && m === "POST") { await auth.logout(req); return json(res, 200, { ok: true }, { "Set-Cookie": auth.clearCookie(req) }); }
+  if (p === "/api/admin/logout-all" && m === "POST") { await db.deleteAllSessions(); return json(res, 200, { ok: true }, { "Set-Cookie": auth.clearCookie(req) }); }
+
+  if (p === "/api/admin/content" && m === "GET") {
+    const c = await content();
+    return json(res, 200, { content: c.data, updatedAt: c.updatedAt, schema, tabs, defaults, savedInDb: db.usingDb() });
+  }
+  if (p === "/api/admin/content" && m === "PUT") {
+    const b = await readBody(req, 600e3);
+    if (!b || typeof b.content !== "object") return json(res, 400, { error: "Nothing to save." });
+    const issues = problems(b.content);
+    const current = (await content()).data;
+    const data = normalize(b.content, current);
+    await db.saveContent(data, current);
+    clearCache();
+    return json(res, 200, { ok: true, content: data, warnings: issues });
+  }
+  if (p === "/api/admin/history" && m === "GET") return json(res, 200, { history: await db.listHistory() });
+  const hm = p.match(/^\/api\/admin\/history\/(\d+)\/restore$/);
+  if (hm && m === "POST") {
+    const old = await db.getHistory(Number(hm[1]));
+    if (!old) return json(res, 404, { error: "That version no longer exists." });
+    await db.saveContent(normalize(old), (await content()).data); clearCache();
+    return json(res, 200, { ok: true });
+  }
+  if (p === "/api/admin/reset" && m === "POST") { await db.saveContent(normalize(defaults), (await content()).data); clearCache(); return json(res, 200, { ok: true }); }
+
+  if (p === "/api/admin/leads" && m === "GET") return json(res, 200, { leads: await db.listLeads(), statuses: STATUSES, savedInDb: db.usingDb() });
+  if (p === "/api/admin/leads.csv" && m === "GET") {
+    const rows = await db.listLeads();
+    const head = ["Date (IST)", "Name", "Phone", "Email", "Service", "Budget", "Message", "Status", "Note"];
+    const lines = [head.map(csvCell).join(",")].concat(rows.map((l) => [
+      new Date(l.created_at).toLocaleString("en-IN", { timeZone: "Asia/Kolkata" }), l.name, l.phone, l.email, l.service, l.budget, l.message, l.status, l.note,
+    ].map(csvCell).join(",")));
+    return send(res, 200, "﻿" + lines.join("\r\n"), { "Content-Type": "text/csv; charset=utf-8", "Content-Disposition": `attachment; filename="leads-${new Date().toISOString().slice(0, 10)}.csv"`, "Cache-Control": "no-store" });
+  }
+  const lm = p.match(/^\/api\/admin\/leads\/(\d+)$/);
+  if (lm && m === "PATCH") {
+    const b = await readBody(req, 5e3);
+    const status = STATUSES.includes(b.status) ? b.status : undefined;
+    const note = typeof b.note === "string" ? b.note.slice(0, 1000) : undefined;
+    const ok = await db.updateLead(Number(lm[1]), { status, note });
+    return json(res, ok ? 200 : 404, ok ? { ok: true } : { error: "Lead not found." });
+  }
+  if (lm && m === "DELETE") {
+    const ok = await db.deleteLead(Number(lm[1]));
+    return json(res, ok ? 200 : 404, ok ? { ok: true } : { error: "Lead not found." });
+  }
+  return json(res, 404, { error: "Not found." });
+}
+
+// ---- Router ----
+async function handle(req, res) {
+  const url = new URL(req.url, "http://localhost");
+  const p = url.pathname, m = req.method;
+
+  if (p === "/health") return json(res, 200, { ok: true });
+  if (p.startsWith("/api/admin/")) return handleAdminApi(req, res, url);
+  if (p === "/api/contact" && m === "POST") return handleContact(req, res);
+
+  if (m !== "GET" && m !== "HEAD") return json(res, 405, { error: "Method not allowed." });
+
+  if (p === "/" || p === "/index.html") {
+    const c = await content();
+    return send(res, 200, c.html, { "Content-Type": "text/html; charset=utf-8", "Cache-Control": "no-cache" });
+  }
+  if (p === "/contact.vcf" || p === "/shubham-gupta.vcf") {
+    const c = await content();
+    const host = req.headers.host ? `https://${String(req.headers.host).replace(/[^A-Za-z0-9.:-]/g, "")}` : "";
+    const fname = (c.data.contact.name || "contact").replace(/[^A-Za-z0-9]+/g, "-");
+    return send(res, 200, vcard(c.data, host), { "Content-Type": "text/vcard; charset=utf-8", "Content-Disposition": `inline; filename="${fname}.vcf"`, "Cache-Control": "no-cache" });
+  }
+
+  // Admin pages
+  if (p === "/admin" || p === "/admin/") {
+    if (!(await auth.isAdmin(req))) { res.writeHead(302, { ...ADMIN_HEADERS, Location: "/admin/login" }); return res.end(); }
+    return serveFile(res, ADMIN, "/panel.html", ADMIN_HEADERS) || send(res, 404, "Not found");
+  }
+  if (p === "/admin/login") return serveFile(res, ADMIN, "/login.html", ADMIN_HEADERS) || send(res, 404, "Not found");
+  if (/^\/admin\/[a-z-]+\.(css|js)$/.test(p)) return serveFile(res, ADMIN, p.slice("/admin".length), ADMIN_HEADERS) || send(res, 404, "Not found");
+
+  // Old static copies of the page are no longer used; always serve the live page instead
+  if (p.endsWith(".html")) { res.writeHead(302, { Location: "/" }); return res.end(); }
+  if (serveFile(res, PUBLIC, p)) return;
+
+  const c = await content();
+  return send(res, 404, c.html, { "Content-Type": "text/html; charset=utf-8", "Cache-Control": "no-cache" });
+}
+
+const server = http.createServer((req, res) => {
+  handle(req, res).catch((e) => {
+    const status = e.status || 500;
+    if (status === 500) console.error("Request failed:", req.method, req.url, e.message);
+    if (!res.headersSent) json(res, status, { error: status === 413 ? "That's too large." : status === 400 ? "Bad request." : "Something went wrong." });
+    else res.end();
+  });
 });
 
-// ---- Email alert via Resend (HTTPS API, works on Render free). Set RESEND_API_KEY and LEAD_EMAIL_TO. ----
-const esc = (v) => String(v || "-").replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
-async function notifyEmail(lead) {
-  const key = process.env.RESEND_API_KEY;
-  const to = process.env.LEAD_EMAIL_TO;
-  if (!key || !to) return;
-  const time = new Date().toLocaleString("en-IN", { timeZone: "Asia/Kolkata", dateStyle: "medium", timeStyle: "short" });
-  const row = (k, v) => `<tr><td style="padding:10px 14px;color:#6b7280;font-weight:600;border-bottom:1px solid #eee;width:110px">${k}</td><td style="padding:10px 14px;color:#111;border-bottom:1px solid #eee">${v}</td></tr>`;
-  const phoneLink = lead.phone ? `<a href="tel:${esc(lead.phone)}">${esc(lead.phone)}</a>` : "-";
-  const html = `<div style="font-family:Arial,sans-serif;max-width:560px;margin:auto">
-    <div style="background:#06080f;color:#fff;padding:20px 22px;border-radius:12px 12px 0 0">
-      <div style="font-size:13px;color:#ffc83d;font-weight:700;letter-spacing:1px">DIGITAL SHUBHAM</div>
-      <div style="font-size:22px;font-weight:800;margin-top:4px">🔔 New website lead</div>
-    </div>
-    <table style="width:100%;border-collapse:collapse;background:#fff;border:1px solid #eee">
-      ${row("Name", esc(lead.name))}${row("Phone", phoneLink)}${row("Email", esc(lead.email))}
-      ${row("Service", esc(lead.service))}${row("Budget", esc(lead.budget))}${row("Message", esc(lead.message))}
-      ${row("Time", esc(time))}
-    </table>
-    <p style="color:#6b7280;font-size:12px;margin-top:12px">Saved in your Neon database (leads table).</p>
-  </div>`;
-  try {
-    const r = await fetch("https://api.resend.com/emails", {
-      method: "POST",
-      headers: { Authorization: `Bearer ${key}`, "Content-Type": "application/json" },
-      body: JSON.stringify({
-        from: process.env.LEAD_EMAIL_FROM || "Website Leads <onboarding@resend.dev>",
-        to: [to],
-        reply_to: lead.email || undefined,
-        subject: `New lead: ${lead.name} · ${lead.service || "Enquiry"}`,
-        html,
-      }),
-      signal: AbortSignal.timeout(15000),
-    });
-    console.log(r.ok ? "Email alert sent" : `Email alert failed: HTTP ${r.status} ${await r.text()}`);
-  } catch (e) {
-    console.error("Email alert failed:", e.message);
-  }
-}
+db.init()
+  .catch((e) => console.error("Database setup failed:", e.message))
+  .finally(() => {
+    const prob = auth.setupProblem();
+    if (prob) console.warn(prob);
+    server.listen(PORT, () => console.log(`Portfolio running on port ${PORT}`));
+  });
 
-// ---- WhatsApp alert via CallMeBot (free). Set WHATSAPP_PHONE and CALLMEBOT_APIKEY on Render. ----
-async function notifyWhatsApp(lead) {
-  const phone = process.env.WHATSAPP_PHONE;
-  const apikey = process.env.CALLMEBOT_APIKEY;
-  if (!phone || !apikey) return;
-  const time = new Date().toLocaleString("en-IN", { timeZone: "Asia/Kolkata", dateStyle: "medium", timeStyle: "short" });
-  const text = [
-    "🔔 *New Website Lead*",
-    "",
-    `👤 *Name:* ${lead.name}`,
-    `📞 *Phone:* ${lead.phone || "-"}`,
-    `✉️ *Email:* ${lead.email || "-"}`,
-    `🛠 *Service:* ${lead.service || "-"}`,
-    `💰 *Budget:* ${lead.budget || "-"}`,
-    `💬 *Message:* ${lead.message || "-"}`,
-    "",
-    `🕒 ${time}`,
-  ].join("\n");
-  const url =
-    "https://api.callmebot.com/whatsapp.php?phone=" + encodeURIComponent(phone) +
-    "&text=" + encodeURIComponent(text) + "&apikey=" + encodeURIComponent(apikey);
-  try {
-    const r = await fetch(url, { signal: AbortSignal.timeout(15000) });
-    console.log(r.ok ? "WhatsApp alert sent" : `WhatsApp alert failed: HTTP ${r.status}`);
-  } catch (e) {
-    console.error("WhatsApp alert failed:", e.message);
-  }
-}
-
-app.use((_req, res) => res.status(404).sendFile(path.join(__dirname, "public", "index.html")));
-
-app.listen(PORT, () => console.log(`Portfolio running on port ${PORT}`));
+module.exports = server;

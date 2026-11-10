@@ -1,0 +1,41 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="robots" content="noindex, nofollow" />
+  <title>Admin login · Digital Shubham</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@700;800&family=Manrope:wght@500;600;700&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="/admin/admin.css?v=1" />
+</head>
+<body>
+  <div class="login-wrap">
+    <div class="login-card">
+      <div class="brand">Digital<span>Shubham</span><small>Admin</small></div>
+
+      <div id="setup" class="notice hidden"></div>
+
+      <form id="step1" autocomplete="on">
+        <h1>Welcome back 👋</h1>
+        <p class="sub">Enter your admin password. A 6-digit code will then be sent to your email.</p>
+        <label class="field"><span>Password</span><input id="password" type="password" autocomplete="current-password" required /></label>
+        <button class="btn btn-primary full" id="btn1" type="submit">Continue →</button>
+        <p class="msg" id="msg1" role="alert"></p>
+      </form>
+
+      <form id="step2" class="hidden" autocomplete="off">
+        <h1>Check your email 📩</h1>
+        <p class="sub">We sent a 6-digit code to <b id="emailHint"></b>. It expires in 10 minutes.</p>
+        <label class="field"><span>Login code</span><input id="code" class="code-input" inputmode="numeric" pattern="[0-9]*" maxlength="6" autocomplete="one-time-code" required /></label>
+        <button class="btn btn-primary full" id="btn2" type="submit">Log in</button>
+        <p class="msg" id="msg2" role="alert"></p>
+        <button class="btn btn-sm" id="back" type="button">← Use a different password / resend code</button>
+      </form>
+
+      <p class="lock-note">🔒 Locked after 5 wrong attempts · You'll get an email for every login</p>
+    </div>
+  </div>
+  <script src="/admin/login.js?v=1"></script>
+</body>
+</html>

@@ -3,24 +3,27 @@
   const $$ = (s, el = document) => [...el.querySelectorAll(s)];
   const fine = matchMedia("(pointer: fine)").matches;
   const reduce = matchMedia("(prefers-reduced-motion: reduce)").matches;
+  const SITE = window.SITE || {};
+  const C = SITE.contact || {};
 
   // ---- Preloader ----
-  document.body.classList.add("loading");
+  const loader = $("#loader");
+  if (loader) document.body.classList.add("loading");
   const finish = () => {
-    $("#loader").classList.add("done");
+    if (loader) loader.classList.add("done");
     document.body.classList.remove("loading");
     document.body.classList.add("ready");
   };
-  window.addEventListener("load", () => setTimeout(finish, 900));
+  window.addEventListener("load", () => setTimeout(finish, loader ? 900 : 0));
   setTimeout(finish, 3500); // safety net
 
-  $("#year").textContent = new Date().getFullYear();
+  if ($("#year")) $("#year").textContent = new Date().getFullYear();
 
   // ---- Rotating headline words ----
-  const words = ["qualified leads", "real sales", "higher ROAS", "loyal customers", "brand growth"];
+  const words = SITE.words || [];
   const rot = $("#rotator");
   let wi = 0;
-  if (!reduce) {
+  if (!reduce && rot && words.length > 1) {
     setInterval(() => {
       rot.classList.add("out");
       setTimeout(() => {
@@ -89,18 +92,9 @@
   });
 
   // ---- Looping result toasts ----
-  const toasts = [
-    ["Real Estate", "28 site visits booked", "Nearly 1 in 3 qualified buyers visited in 3 weeks"],
-    ["Real Estate", "13.1% click-to-lead rate", "2,856 clicks turned into 375 leads"],
-    ["EdTech", "Lead at ₹1.75", "373 hiring leads at an average of ₹3.92"],
-    ["Real Estate", "Cost per lead ₹97.71", "Retargeting warm custom audiences"],
-    ["EdTech", "CPM just ₹2.49", "6.77L total reach on result posts"],
-    ["Real Estate", "96 qualified buyers", "From 2L+ impressions at 1.41% CTR"],
-    ["EdTech", "₹0.11 per video view", "16.6K full video plays"],
-    ["All industries", "₹15.5L+ budget managed", "900+ leads generated so far"],
-  ];
+  const toasts = (SITE.toasts || []).map((t) => [t.tag, t.title, t.text]);
   const toast = $("#toast");
-  if (toast) {
+  if (toast && toasts.length) {
     let ti = 0;
     const showToast = () => {
       const [tag, title, text] = toasts[ti++ % toasts.length];
@@ -122,9 +116,11 @@
     bar.style.width = `${(y / h) * 100}%`;
     nav.classList.toggle("scrolled", y > 30);
     lastY = y;
-    const r = tl.getBoundingClientRect();
-    const p = Math.min(Math.max((innerHeight * 0.6 - r.top) / r.height, 0), 1);
-    fill.style.height = `${p * 100}%`;
+    if (tl && fill) {
+      const r = tl.getBoundingClientRect();
+      const p = Math.min(Math.max((innerHeight * 0.6 - r.top) / r.height, 0), 1);
+      fill.style.height = `${p * 100}%`;
+    }
     let current = "";
     sections.forEach((s) => { if (s.getBoundingClientRect().top < innerHeight * 0.4) current = s.id; });
     $$(".nav-links a").forEach((a) => a.classList.toggle("active", a.getAttribute("href") === `#${current}`));
@@ -140,7 +136,7 @@
   // ---- Desktop-only pointer effects ----
   if (fine && !reduce) {
     const glow = $("#glow");
-    addEventListener("pointermove", (e) => { glow.style.left = e.clientX + "px"; glow.style.top = e.clientY + "px"; });
+    if (glow) addEventListener("pointermove", (e) => { glow.style.left = e.clientX + "px"; glow.style.top = e.clientY + "px"; });
 
     // Magnetic buttons
     $$(".magnetic").forEach((b) => {
@@ -179,7 +175,7 @@
 
   // ---- "Book a Call" buttons: scroll to the form, pop it up and show a hint ----
   const leadForm = $("#leadForm"), hint = $("#formHint");
-  $$(".js-book").forEach((btn) =>
+  if (leadForm) $$(".js-book").forEach((btn) =>
     btn.addEventListener("click", (e) => {
       e.preventDefault();
       leadForm.classList.add("in");
@@ -201,15 +197,15 @@
   const isAndroid = /Android/i.test(ua);
   const inApp = /; wv\)|FBAN|FBAV|Instagram|Line\//i.test(ua);
   const isFirefox = /Firefox/i.test(ua);
-  const vcfUrl = new URL("shubham-gupta.vcf", location.href).href;
+  const vcfUrl = new URL("contact.vcf", location.href).href;
   const enc = encodeURIComponent;
   const contactIntent =
     "intent:#Intent;action=android.intent.action.INSERT;type=vnd.android.cursor.dir/raw_contact;" +
-    "S.name=" + enc("Shubham Gupta") + ";" +
-    "S.phone=" + enc("+917692058084") + ";i.phone_type=2;" +
-    "S.email=" + enc("gupta28shubham09@gmail.com") + ";" +
-    "S.company=" + enc("Digital Shubham") + ";" +
-    "S.job_title=" + enc("Performance & Digital Marketer") + ";" +
+    "S.name=" + enc(C.name || "") + ";" +
+    "S.phone=" + enc(C.phone || "") + ";i.phone_type=2;" +
+    (C.email ? "S.email=" + enc(C.email) + ";" : "") +
+    (C.company ? "S.company=" + enc(C.company) + ";" : "") +
+    (C.jobTitle ? "S.job_title=" + enc(C.jobTitle) + ";" : "") +
     "S.browser_fallback_url=" + enc(vcfUrl) + ";end";
   $$(".js-save-contact").forEach((a) =>
     a.addEventListener("click", (e) => {
@@ -221,10 +217,14 @@
   );
 
   // ---- Contact form -> /api/contact (Neon). Falls back to WhatsApp if the server is unreachable ----
-  const form = $("#leadForm"), note = $("#formNote"), label = $(".btn-label", form);
+  const form = $("#leadForm");
+  if (!form) return;
+  const note = $("#formNote"), label = $(".btn-label", form);
+  const submitText = SITE.submitText || "Send Message";
+  const firstName = (C.name || "").split(" ")[0];
   const waLink = (d) =>
-    "https://wa.me/917692058084?text=" +
-    encodeURIComponent(`Hi Shubham, I'm ${d.name}. I need help with ${d.service} (budget: ${d.budget}). ${d.message || ""}`);
+    "https://wa.me/" + (C.whatsapp || "") + "?text=" +
+    encodeURIComponent(`Hi ${firstName}, I'm ${d.name}. I need help with ${d.service} (budget: ${d.budget}). ${d.message || ""}`);
 
   form.addEventListener("submit", async (e) => {
     e.preventDefault();
@@ -242,13 +242,16 @@
       if (!res.ok || !out.ok) throw new Error(out.error || "Could not send");
       form.reset();
       note.className = "form-note ok";
-      note.textContent = "Thank you! You're registered. I'll call you back within 24 hours.";
-      hint.classList.remove("show");
+      note.textContent = SITE.successText || "Thank you! I'll get back to you soon.";
+      if (hint) hint.classList.remove("show");
     } catch (err) {
       note.className = "form-note err";
-      note.innerHTML = `Couldn't send right now. <a href="${waLink(d)}" target="_blank" rel="noopener">Send it on WhatsApp instead →</a>`;
+      note.textContent = "Couldn't send right now. ";
+      const a = document.createElement("a");
+      a.href = waLink(d); a.target = "_blank"; a.rel = "noopener"; a.textContent = "Send it on WhatsApp instead →";
+      note.appendChild(a);
     } finally {
-      label.textContent = "Send Message";
+      label.textContent = submitText;
     }
   });
 })();

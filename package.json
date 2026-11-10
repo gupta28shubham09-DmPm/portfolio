@@ -1,9 +1,8 @@
 {
-  "name": "shubham-gupta-portfolio",
-  "version": "1.0.0",
-  "description": "Portfolio website of Shubham Gupta - Performance & Digital Marketing",
+  "name": "digital-shubham-portfolio",
+  "version": "2.0.0",
+  "description": "Digital Shubham portfolio website with a secure admin panel",
   "main": "server.js",
-  "type": "commonjs",
   "scripts": {
     "start": "node server.js"
   },
@@ -11,7 +10,6 @@
     "node": ">=18"
   },
   "dependencies": {
-    "express": "^4.21.2",
     "pg": "^8.13.1"
   }
 }
